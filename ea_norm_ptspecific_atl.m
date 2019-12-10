@@ -20,12 +20,12 @@ mkdir([proot,'atlases',filesep,'mni',filesep,options.atlasset,filesep,'mixed']);
 mkdir([proot,'atlases',filesep,'mni',filesep,options.atlasset,filesep,'midline']);
 
 
-    if ~exist([ea_space(options,'atlases'),options.atlasset,filesep,'atlas_index.mat'],'file')
-        atlases=ea_genatlastable([],ea_space('atlases'),options);
-    else
-        load([ea_space(options,'atlases'),options.atlasset,filesep,'atlas_index.mat']);
-        atlases=ea_genatlastable(atlases,ea_space('atlases'),options);
-    end
+if ~exist([ea_space(options,'atlases'),options.atlasset,filesep,'atlas_index.mat'],'file')
+    atlases=ea_genatlastable([],ea_space(options,'atlases'),options);
+else
+    load([ea_space(options,'atlases'),options.atlasset,filesep,'atlas_index.mat']);
+    atlases=ea_genatlastable(atlases,ea_space(options,'atlases'),options);
+end
 
 for atlas=1:length(atlases.names)
     switch atlases.types(atlas)
@@ -114,7 +114,7 @@ ea_methods(directory,...
             ['Subcortical atlases were projected into native space using the inverse deformation field mapping from native to template space (estimated in the normalization step based on pre-operative acquisitions) ',...
             'as implemented in Lead-DBS software',...
             ' (Horn & Kuehn 2005; SCR_002915; http://www.lead-dbs.org).'],...
-            {'Horn, A., & Kühn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127?135. http://doi.org/10.1016/j.neuroimage.2014.12.002'});
+            {'Horn, A., & Kuehn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127?135. http://doi.org/10.1016/j.neuroimage.2014.12.002'});
 
 
 

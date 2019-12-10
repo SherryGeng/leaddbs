@@ -1,4 +1,4 @@
-function prefs = ea_prefs(patientname)
+function prefs = ea_prefs_default(patientname)
 
 % determine preferences here. For filenames, the variable 'patientname' can
 % be used in string-handling. This variable will be a string with the same name as the patient
@@ -35,22 +35,22 @@ prefs.tp_ctnii_coregistered=['tp_',prefs.ctnii_coregistered];
 prefs.preferMRCT = 1; % preference of MR or CT modality for post-op image: 1 for MR, 2 for CT.
 
 prefs.patientdir=patientname;
-prefs.prenii='lanat.nii';
-prefs.tranii='lpostop_tra.nii';
-prefs.cornii='lpostop_cor.nii';
-prefs.sagnii='lpostop_sag.nii';
-prefs.ctnii='lpostop_ct.nii';
 
 prefs.gprenii='glanat.nii';
 prefs.gtranii='glpostop_tra.nii';
 prefs.gcornii='glpostop_cor.nii';
 prefs.gsagnii='glpostop_sag.nii';
 prefs.gctnii='glpostop_ct.nii';
+
+
 prefs.tp_gctnii=['tp_',prefs.gctnii];
 
+%% Misc:
+prefs.tonemap='heuristic'; % set to 'albada' to change to datadriven mode
+
 %% connectome files:
-prefs.rest_prefix='res*.nii'; % raw resting state fMRI data search string
-prefs.rest_default='rest.nii'; % default for dcm2nii export.
+prefs.rest_searchstring='rest*.nii'; % raw resting state fMRI data search string
+prefs.rest='rest.nii'; % default for dcm2nii export.
 
 %% connectome settings:
 prefs.lc.struc.maxdist=2; % maximal distance to form a connection (between fiber terminals and voxel centers, in mm).
@@ -66,6 +66,7 @@ prefs.lc.datadir=[ea_getearoot,'connectomes',filesep];
 
 %% connectome mapper settings:
 prefs.lcm.vatseed='binary'; % set to 'efield_gauss' to use weighted seed of normalized E-field (or 'efield' to use weighted seed of unmodified e-field - not recommended).
+prefs.lcm.chunk=10; % define how many fMRI seeds to handle in the same run. Can be 0 to handle all supplied. Depending on RAM available, 5-20 is a good option.
 
 %% DTI-files:
 prefs.b0='b0.nii';
@@ -92,7 +93,10 @@ prefs.normalize.fsl.warpres=8; % Defines the warp resolution in FSL warps.
 prefs.normalize.spm.resolution=1; % Defines resolution in mm when using SPM normalization routines (New Segment, DARTEL, SHOOT).
 
 %% Reconstruction
-prefs.reco.saveACPC=1; % also save reconstructions in AC/PC space
+prefs.reco.mancoruse='postop'; % switch to 'rpostop' to use resliced CT.
+prefs.reco.saveACPC=0; % also save reconstructions in AC/PC space
+prefs.reco.saveimg=0; % save fiducial marker visualisation as image after "Refined TRAC/CORE"
+prefs.reco.exportfiducials=0; % automatically export fiducials to a comma separated value file after "Refined TRAC/CORE". Set this to 'fcsv' for simple import into Slicer, otherwise set to 'csv' or 'txt' for import into other software.
 
 %% Coregistration (CT/MR):
 prefs.ctcoreg.default='ea_coregctmri_ants';
@@ -102,7 +106,7 @@ prefs.mrcoreg.default='spm'; % set to 'spm' or 'ants'
 prefs.mrcoreg.writeoutcoreg=0; % set default to 0 to prevent writing out coregistration transformation
 
 %% Subcortical refine (Post to Pre):
-prefs.scrf.auto='mask1'; % can be 'off' to not perform automatic subcortical refine, 'nomask' to just use cropped image, 'mask1' to use Schoenecker mask 1 or 'mask2' to use both Schoenecker masks.
+prefs.scrf.tonemap='tp_'; % can set to '' if want to use non-tonemapped CTs for brainshift correction (default = 'tp_').
 
 %% Atlas-Sets:
 prefs.atlases.default='DISTAL Minimal (Ewert 2017)';
@@ -129,6 +133,7 @@ prefs.d3.fiberstyle='tube'; % set to 'line' to show thin fibers
 prefs.d3.fiberdiameter=0.1; % diameter of fibers ? only works in all ML versions with style==tube
 prefs.d3.maxfibers=200; % set to inf to show all fibers (but this could lead to crashes).
 prefs.d3.colorjitter=0; % set to 0 to show no color jitter at all.
+prefs.d3.showdirarrows = 0;
 
 %% Video export
 prefs.video.path=[-90,10;-110,10;-180,80;-250,10;-360,10;-450,10];
@@ -138,6 +143,7 @@ prefs.video.opts.Periodic=true;
 
 %% FEM-VAT settings:
 prefs.vat.gm='mask'; % set to 'atlas' to use current atlas single structures, 'mask' to use 'gm_mask.nii', set to 'tpm' to use c1 portion of tpm.
+prefs.vat.efieldmax=10000; % set upper limit for maximal values in efield.
 
 %% MER-Visualization:
 prefs.mer.rejwin = [1 60];
@@ -164,10 +170,14 @@ prefs.mer.tract_info = struct(...
 %% Cortex-Visualization:
 prefs.d3.cortexcolor=[0.65 0.65 0.65]; % default color is gray
 prefs.d3.cortexalpha=0.5; % default alpha is 0.5
-prefs.d3.corticalatlas='DKT'; % Currently supports 'DKT','DKT_aseg','a2009'
+prefs.d3.cortex_defaultatlas='DKT'; % Currently supports 'DKT','DKT_aseg','a2009'
+
+%% Freesurfer Preferences
+prefs.d3.fs.dev=0;
 
 %% DICOM files:
 prefs.dicom.dicomfiles=0; % 1: delete DICOMs after conversion, 0: Leave DICOMs at pt/DICOM folder after conversion.
+prefs.dicom.tool='dcm2niix'; % switch to 'dicm2nii' to use the Matlab based converter.
 
 %% fibers:
 
@@ -181,6 +191,8 @@ prefs.ls.autosave=0;
 
 %% environment
 prefs.env.dev=0;
+prefs.env.logtime=0;
+prefs.env.campus='generic';
 prefs.ixi.meanage=60; % mean age used if no patient/subject age is specified in folder.
 
 %% xelatex executable path:
@@ -189,3 +201,4 @@ prefs.ltx.pdfconverter=''; % set path to xelatex here (for PDF export)
 prefs.ls.dir=''; % set path to lead server here (for web export)
 prefs.ixi.dir=''; % set path to ixi database here
 prefs.ixi.meanage=60; % mean age used if no patient/subject age is specified in folder.
+

@@ -8,8 +8,14 @@ else
     options.atlasset='';
     options.d3.writeatlases=0;
 end
+options.leadprod='dbs';
+options.d3.elrendering=1;
+options.d3.exportBB=0;
 resultfig=ea_elvis(options);
+colormap gray
 hold on
+            ea_zoomcenter(resultfig.CurrentAxes, [0,0,0], 3);
+
 
 
 function options=getoptslocal
@@ -20,7 +26,8 @@ options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
 options.earoot = ea_getearoot;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
+options.assignnii = 0;
 options.normalize.do = false;
 options.normalize.settings = [];
 options.normalize.method = 'ea_normalize_ants';
@@ -181,8 +188,8 @@ options.prefs.gcornii = 'glpostop_cor.nii';
 options.prefs.gsagnii = 'glpostop_sag.nii';
 options.prefs.gctnii = 'glpostop_ct.nii';
 options.prefs.tp_gctnii = 'tp_glpostop_ct.nii';
-options.prefs.rest_prefix = 'res*.nii';
-options.prefs.rest_default = 'rest.nii';
+options.prefs.rest_searchstring = 'rest*.nii';
+options.prefs.rest = 'rest.nii';
 options.prefs.lc.struc.maxdist = 2;
 options.prefs.lc.struc.minlen = 3;
 options.prefs.lc.graphsurfc = [0.2081 0.1663 0.5292];
@@ -250,7 +257,7 @@ options.prefs.mer.length = 24;
 options.prefs.mer.defaulttract = 1;
 options.prefs.mer.tag.visible = 'off';
 options.prefs.dicom.dicomfiles = 0;
-options.prefs.dicom.assign = 0;
+options.prefs.dicom.tool='dcm2niix';
 options.prefs.addfibers = {};
 options.prefs.native.warp = 'inverse';
 options.prefs.ls.autosave = 0;
@@ -263,7 +270,6 @@ options.prefs.prenii_t1 = 'lanat_t1.nii';
 options.prefs.prenii_pd = 'lanat_pd.nii';
 options.prefs.gprenii_t1 = 'glanat_t1.nii';
 options.prefs.gprenii_pd = 'glanat_pd.nii';
-options.prefs.rest = 'rest.nii';
 options.prefs.vat.gm = 'atlas';
 options.prefs.firstrun = 'off';
 options.prefs.machine.d2.col_overlay = 0;

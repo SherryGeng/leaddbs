@@ -24,20 +24,21 @@ switch options.modality
             [directory,options.prefs.gcornii],...
             [directory,options.prefs.gsagnii]};
     case 2
-        try ea_tonemapct_file(options,'native'); end
-        try ea_tonemapct_file(options,'mni'); end
+        if exist([directory,options.prefs.ctnii_coregistered],'file')
+            try ea_tonemapct_file(options,'native'); end
+        end
+
+        if exist([directory,options.prefs.gctnii],'file')
+            try ea_tonemapct_file(options,'mni'); end
+        end
+
         fis2anat={[directory,'tp_',options.prefs.ctnii_coregistered]};
         fis2mni={[directory,options.prefs.gprenii],...
             [directory,'tp_',options.prefs.gctnii]};
 end
 fis2anat=[fis2anat,oanat'];
 
-basedir=[ea_getearoot,'ext_libs',filesep,'fsl',filesep];
-if ispc
-    SLICER = ea_path_helper([basedir, 'slicer.exe']);
-else
-    SLICER = [basedir, 'slicer.', computer('arch')];
-end
+
 cnt=1;
 try
     nm=ea_cleanmethodname(['_',ea_whichnormmethod(directory)]);
@@ -56,6 +57,9 @@ try
 catch
     mm='';
 end
+if ~exist([directory,'checkreg'],'file')
+    mkdir([directory,'checkreg']);
+end
 for fi=1:length(fis2anat)
     [~,fname]=fileparts(fis2anat{fi});
     [~,rfname]=fileparts(primanat);
@@ -68,8 +72,8 @@ for fi=1:length(fis2anat)
     ofname{cnt}=[fname,'2',rfname,suffx,'.png'];
 
     if exist(fis2anat{fi},'file')
-        cmd{cnt}=[SLICER,' ',ea_path_helper(fis2anat{fi}),' ',ea_path_helper(primanat),' -a ',ea_path_helper([directory,'checkreg',filesep,ofname{cnt}])];
-        cnt=cnt+1;
+        
+        ea_gencheckregpair(stripext(fis2anat{fi}),stripext(primanat),[directory,'checkreg',filesep,ofname{cnt}]);
     end
 end
 for fi=1:length(fis2mni)
@@ -77,24 +81,15 @@ for fi=1:length(fis2mni)
     [~,rfname]=fileparts(mnihires);
     ofname{cnt}=[fname,'2',rfname,nm,'.png'];
     if exist(fis2mni{fi},'file')
-        cmd{cnt}=[SLICER,' ',ea_path_helper(fis2mni{fi}),' ',ea_path_helper(mnihires),' -a ',ea_path_helper([directory,'checkreg',filesep,ofname{cnt}])];
-        cnt=cnt+1;
+                ea_gencheckregpair(stripext(fis2mni{fi}),stripext(mnihires),[directory,'checkreg',filesep,ofname{cnt}]);
     end
-end
-if ~exist([directory,'checkreg'],'file')
-    mkdir([directory,'checkreg']);
 end
 
-setenv('FSLOUTPUTTYPE','NIFTI')
-for c=1:length(cmd)
-    if ~ispc
-        system(['bash -c "', cmd{c}, '"']);
-    else
-        system(cmd{c});
-    end
-end
 disp('Done.');
 
+function fn=stripext(fn)
+[pth,fn,ext]=fileparts(fn);
+fn=fullfile(pth,fn);
 
 function name=ea_cleanmethodname(name)
 name(strfind(name,':'))=[];

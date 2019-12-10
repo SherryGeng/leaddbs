@@ -8,9 +8,9 @@ function ea_dicom_import(options)
 % Copyright (C) 2014 Charite University Medicine Berlin, Movement Disorders Unit
 % Andreas Horn
 
-disp('Importing DICOM files...');
-
 outdir = [options.root, options.patientname, filesep];
+
+disp('Importing DICOM files...');
 
 % check DICOM folder/zipfile under subject folder, can be named as:
 % 'DICOM', 'DICOMDAT', 'DICOM.zip' or 'DICOMDAT.zip' (case insensitive).
@@ -19,12 +19,14 @@ dcmnames = ea_regexpdir(outdir, '^dicom(DAT)?(/|\\|\.zip)$', 0);
 if isempty(dcmnames)
     % not found, suppose the subject folder is actually DICOM folder
     movefile([outdir, '*'],[outdir, 'DICOM'])
-    try    movefile([outdir, 'DICOM', filesep, 'ea_ui.mat'], outdir); end % this isn't created when selecting multiple folders.
+    try
+        % this isn't created when selecting multiple folders.
+        movefile([outdir, 'DICOM', filesep, 'ea_ui.mat'], outdir);
+    end
     dcmname = [outdir, 'DICOM', filesep];
 else % found DICOM folder/zipfile
     dcmname = dcmnames{1}; % only choose the first found one
 end
-
 
 if strcmp(dcmname(end-3:end), '.zip') % zip file under subject folder
     unzip(dcmname, [outdir, 'DICOM']);
@@ -39,7 +41,39 @@ else % DICOM folder under subject folder
     indir = dcmname;
 end
 
-ea_dcm2niix(indir, outdir);
+if isfield(options.dicomimp,'method')
+    switch options.dicomimp.method
+        case 1 % dcm2niix
+            ea_dcm2niix(indir, outdir);
+            ea_methods(options, ['DICOM images were converted to the '...
+                'NIfTI file format using dcm2niix (see https://github.com/rordenlab/dcm2niix).']);
+        case 2 % dicm2nii
+            ea_dicm2nii(indir, outdir);
+            ea_delete([outdir, 'dcmHeaders.mat']);
+            ea_methods(options, ['DICOM images were converted to the '...
+                'NIfTI file format using dicm2nii (see https://github.com/xiangruili/dicm2nii).']);
+        case 3 % SPM
+            ea_spm_dicom_import(indir, outdir);
+            ea_methods(options, ['DICOM images were converted to the '...
+                'NIfTI file format using SPM.']);
+    end
+else % use default set in prefs
+    switch lower(options.prefs.dicom.tool)
+        case 'dcm2niix'
+            ea_dcm2niix(indir, outdir);
+            ea_methods(options, ['DICOM images were converted to the '...
+                'NIfTI file format using dcm2niix (see https://github.com/rordenlab/dcm2niix).']);
+        case 'dicm2nii'
+            ea_dicm2nii(indir, outdir);
+            ea_delete([outdir, 'dcmHeaders.mat']);
+            ea_methods(options, ['DICOM images were converted to the '...
+                'NIfTI file format using dicm2nii (see https://github.com/xiangruili/dicm2nii).']);
+        case 'spm' % SPM
+            ea_spm_dicom_import(indir, outdir);
+            ea_methods(options, ['DICOM images were converted to the '...
+                'NIfTI file format using SPM.']);
+    end
+end
 
 % delete DICOM folder
 if options.prefs.dicom.dicomfiles
@@ -47,16 +81,9 @@ if options.prefs.dicom.dicomfiles
 end
 
 % remove uncropped and untilted versions
-fclean = ea_regexpdir(outdir, '(_Crop_1|_Tilt_1)\.nii$', 0);
+fclean = ea_regexpdir(outdir, '(_Crop_1|_Tilt_1|_Tilt)\.nii$', 0);
 fclean = unique(regexprep(fclean, '(_Crop_1|_Tilt_1)', ''));
 
 for f=1:length(fclean)
     ea_delete(fclean{f});
 end
-
-%% add methods dump:
-
-ea_methods(options,['DICOM images were converted to the NIfTI file format, cropped and reoriented to standard NIfTI orientation using dcm2niiX software (e.g. see https://www.nitrc.org/projects/dcm2nii/).']);
-
-
-

@@ -1,6 +1,17 @@
-function affinefile = ea_coreg2images(options,moving,fixed,ofile,otherfiles,writeoutmat,msks)
+function affinefile = ea_coreg2images(options,moving,fixed,ofile,otherfiles,writeoutmat,msks,interp)
+% Generic function for image coregistration
+%
+% 1. Moving image will keep untouched unless the output points to the same
+%    image.
+% 2. Use 'ea_backuprestore' before this function in case you want to
+%    backup/restore the moving image to/from the 'raw_' prefixed image.
+% 3. 'otherfiles' will always be overwritten. If you don't want them to be
+%    overwritten, use 'ea_apply_coregistration' afterwards to apply the
+%    returned forward transform ('affinefile{1}') to 'otherfiles' rather
+%    than supply 'otherfiles' parameter here.
 
-if nargin < 5
+
+if ~exist('otherfiles','var')
     otherfiles = {};
 elseif isempty(otherfiles) % [] or {} or ''
     otherfiles = {};
@@ -8,38 +19,44 @@ elseif ischar(otherfiles) % single file, make it to cell string
     otherfiles = {otherfiles};
 end
 
-if nargin < 6
+if ~exist('writeoutmat','var') || isempty(writeoutmat)
     writeoutmat = 0;
+end
+
+if ~exist('affinefile','var') || isempty(affinefile)
     affinefile = {};
 end
-if ~exist('msks','var')
+
+if ~exist('msks','var') || isempty(msks)
     msks={};
 end
-[directory,mfilen,ext]=fileparts(moving);
-directory=[directory,filesep];
-mfilen=[mfilen,ext];
 
-if exist([directory,'raw_',mfilen],'file')
-    copyfile([directory,'raw_',mfilen],[directory,mfilen]);
-else
-    copyfile([directory,mfilen],[directory,'raw_',mfilen]);
+if ~exist('interp','var') || isempty(interp)
+    interp=4;
 end
 
 switch options.coregmr.method
     case 'SPM' % SPM
-        commaoneotherfiles=prepforspm(otherfiles);
+        affinefile = ea_spm_coreg(options,moving,fixed,'nmi',1,otherfiles,writeoutmat,interp);
 
-        affinefile = ea_docoreg_spm(options,appendcommaone(moving),appendcommaone(fixed),'nmi',1,commaoneotherfiles,writeoutmat);
-        try % will fail if ofile is same string as r mfilen..
-            movefile([directory,'r',mfilen],ofile);
+        [fpth, fname, ext] = ea_niifileparts(moving);
+        spmoutput = [fileparts(fpth), filesep, 'r', fname, ext];
+        if ~strcmp(spmoutput, ofile)
+            movefile(spmoutput, ofile);
         end
+
         for ofi=1:length(otherfiles)
-            [pth,fn,ext]=fileparts(otherfiles{ofi});
-            movefile(fullfile(pth,['r',fn,ext]),fullfile(pth,[fn,ext]));
+            [fpth, fname, ext] = ea_niifileparts(otherfiles{ofi});
+            spmoutput = [fileparts(fpth), filesep, 'r', fname, ext];
+            movefile(spmoutput, [fpth, ext]);
         end
 
-    case 'FSL' % FSL
+    case 'FSL FLIRT' % FSL FLIRT
         affinefile = ea_flirt(fixed,...
+            moving,...
+            ofile,writeoutmat,otherfiles);
+    case 'FSL BBR' % FSL BBR
+        affinefile = ea_flirt_bbr(fixed,...
             moving,...
             ofile,writeoutmat,otherfiles);
     case 'ANTs' % ANTs
@@ -51,42 +68,20 @@ switch options.coregmr.method
             moving,...
             ofile,writeoutmat,otherfiles);
     case 'Hybrid SPM & ANTs' % Hybrid SPM -> ANTs
-        commaoneotherfiles=prepforspm(otherfiles);
-        ea_docoreg_spm(options,appendcommaone(moving),appendcommaone(fixed),'nmi',0,commaoneotherfiles,writeoutmat)
+        ea_spm_coreg(options,moving,fixed,'nmi',0,otherfiles,writeoutmat)
         affinefile = ea_ants(fixed,...
             moving,...
             ofile,writeoutmat,otherfiles);
     case 'Hybrid SPM & FSL' % Hybrid SPM -> FSL
-        commaoneotherfiles=prepforspm(otherfiles);
-        ea_docoreg_spm(options,appendcommaone(moving),appendcommaone(fixed),'nmi',0,commaoneotherfiles,writeoutmat)
+        ea_spm_coreg(options,moving,fixed,'nmi',0,otherfiles,writeoutmat)
         affinefile = ea_flirt(fixed,...
             moving,...
             ofile,writeoutmat,otherfiles);
     case 'Hybrid SPM & BRAINSFIT' % Hybrid SPM -> Brainsfit
-        commaoneotherfiles=prepforspm(otherfiles);
-        ea_docoreg_spm(options,appendcommaone(moving),appendcommaone(fixed),'nmi',0,commaoneotherfiles,writeoutmat)
+        ea_spm_coreg(options,moving,fixed,'nmi',0,otherfiles,writeoutmat)
         affinefile = ea_brainsfit(fixed,...
             moving,...
             ofile,writeoutmat,otherfiles);
 end
-ea_conformspaceto(fixed, ofile); % fix qform/sform issues.
 
-
-function otherfiles=prepforspm(otherfiles)
-
-
-if size(otherfiles,1)<size(otherfiles,2)
-    otherfiles=otherfiles';
-end
-
-for fi=1:length(otherfiles)
-
-    otherfiles{fi}=appendcommaone(otherfiles{fi});
-
-end
-
-
-function fname=appendcommaone(fname)
-if ~strcmp(fname(end-1:end),',1')
-    fname= [fname,',1'];
-end
+% ea_conformspaceto(fixed, ofile); % fix qform/sform issues.

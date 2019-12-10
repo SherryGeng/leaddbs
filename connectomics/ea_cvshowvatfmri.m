@@ -1,4 +1,4 @@
-function ea_cvshowvatfmri(resultfig,pX,directory,filesare,handles,pV,selectedparc,options)
+function ea_cvshowvatfmri(resultfig,pX,directory,filesare,handles,pV,selectedparc,mod,options)
 %mV=pV; % duplicate labeling handle
 %mX=pX; % duplicate labeling data
 stims=get(handles.vatseed,'String');
@@ -12,18 +12,19 @@ end
 
 pX=round(pX);
 
+mod = strrep(mod, 'Patient''s fMRI - ', '');
+options.prefs.rest = [mod, '.nii'];
 
-if ~exist([directory,'stimulations',filesep,stim,filesep,'vat_timeseries.mat'],'file');
-    ea_warp_vat(options.prefs.rest,'rest',options,handles);
+if ~exist([directory,'stimulations',filesep,stim,filesep,'vat_',mod,'.mat'],'file')
+    ea_warp_vat('rest', options, handles);
     vat_tc=ea_extract_timecourses_vat(options,handles,usevat,dimensionality);
-    save([directory,'stimulations',filesep,stim,filesep,'vat_timeseries.mat'],'vat_tc');
+    save([directory,'stimulations',filesep,stim,filesep,'vat_',mod,'.mat'],'vat_tc');
 else
-    load([directory,'stimulations',filesep,stim,filesep,'vat_timeseries.mat']);
+    load([directory,'stimulations',filesep,stim,filesep,'vat_',mod,'.mat']);
 end
 
-mms=get(handles.matmodality,'String');
 parcs=get(handles.labelpopup,'String');
-tc=load([directory,'connectomics',filesep,parcs{get(handles.labelpopup,'Value')},filesep,'rest_tc']);
+tc=load([directory,'connectomics',filesep,parcs{get(handles.labelpopup,'Value')},filesep,ea_stripext(options.prefs.rest),'_tc']);
 fn=fieldnames(tc);
 tc=eval(['tc.',fn{1},';']);
 tc=[vat_tc,tc];
@@ -45,7 +46,7 @@ else
         end
     end
     cm=corrcoef(tc(tiframe:tiframe+tiwindow,:)); % actual correlation
-    
+
     if get(handles.timecircle,'Value')
         % make a step to next timeframe (prepare next iteration).
         if (tiframe+tiwindow+1)>timedim
@@ -55,36 +56,36 @@ else
         end
     end
 end
+
 for side = 1:length(options.sides)
-seedcon=cm(side,:);
-seedcon=seedcon(3:end);
-thresh=get(handles.vatthresh,'String');
-if strcmp(thresh,'auto');
-    thresh=nanmean(seedcon)+1*0.5*nanstd(seedcon);
-else
-    thresh=str2double(thresh);
-end
+    seedcon=cm(side,:);
+    seedcon=seedcon(3:end);
+    thresh=get(handles.vatthresh,'String');
 
+    if strcmp(thresh,'auto')
+        thresh=nanmean(seedcon)+1*0.5*nanstd(seedcon);
+    else
+        thresh=str2double(thresh);
+    end
 
-tseedcon=seedcon;
-tseedcon(tseedcon<thresh)=0;
-tseedcon(currentseed)=0;
-pX(pX==0)=nan;
-mX=pX;
-for cs=1:length(tseedcon) % assign each voxel of the corresponding cluster with the entries in tseedcon. Fixme, this should be doable wo forloop..
-    mX(ismember(round(pX),cs))=tseedcon(cs);
-end
+    tseedcon=seedcon;
+    tseedcon(tseedcon<thresh)=0;
+    tseedcon(currentseed)=0;
+    pX(pX==0)=nan;
+    mX=pX;
+    for cs=1:length(tseedcon) % assign each voxel of the corresponding cluster with the entries in tseedcon. Fixme, this should be doable wo forloop..
+        mX(ismember(round(pX),cs))=tseedcon(cs);
+    end
 
     Vvat=spm_vol([directory,'stimulations',filesep,stim,filesep,'vat_',usevat{side},'.nii,1']);
     Xvat=spm_read_vols(Vvat);
     vatseedsurf{side}=ea_showseedpatch(resultfig,Vvat,Xvat,options);
 
-
-    
-%sX=ismember(round(pX),currentseed);
-set(0,'CurrentFigure',resultfig)
-set(handles.vatthreshis,'String',num2str(thresh));
+    %sX=ismember(round(pX),currentseed);
+    set(0,'CurrentFigure',resultfig)
+    set(handles.vatthreshis,'String',num2str(thresh));
     vatsurf{side}=ea_showconnectivitypatch(resultfig,pV,mX,thresh,[],[],[],1,0);
 end
+
 setappdata(resultfig,'vatsurf',vatsurf);
 setappdata(resultfig,'vatseedsurf',vatseedsurf);

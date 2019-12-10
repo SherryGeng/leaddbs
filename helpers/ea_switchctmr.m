@@ -29,19 +29,19 @@ if ~isempty(switchto) && ~(length(switchto)==2) && ~strcmp(handles.prod, 'anatom
     switch switchto
         case 1 % MR
                 set(handles.coregctmethod,'Enable','off');
-
-                % PaCER:
-                set(handles.reconmethod,'enable','off');
+                set(handles.reconmethod,'String',{'TRAC/CORE (Horn 2015)','Manual', 'Slicer (Manual)'});
+                % default TRAC/CORE:
+                set(handles.reconmethod,'enable','on');
                 set(handles.reconmethod,'Value',1); % set to TRAC/CORE algorithm.
                 set(handles.targetpopup,'enable','on');
                 set(handles.maskwindow_txt,'enable','on');
 
         case 2 % CT
                 set(handles.coregctmethod,'Enable','on');
-
-                % PaCER:
+                set(handles.reconmethod,'String',{'Refined TRAC/CORE','TRAC/CORE (Horn 2015)','PaCER (Husch 2017)','Manual', 'Slicer (Manual)'});
+                % default PaCER:
                 set(handles.reconmethod,'enable','on');
-                set(handles.reconmethod,'Value',2); % set to PaCER algorithm.
+                set(handles.reconmethod,'Value',3); % set to PaCER algorithm.
                 set(handles.targetpopup,'enable','off');
                 set(handles.maskwindow_txt,'enable','off');
     end

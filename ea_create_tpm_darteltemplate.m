@@ -1,6 +1,6 @@
 function ea_create_tpm_darteltemplate(mute)
 
-if exist([ea_space,'TPM.nii'],'file') && ~ea_checktpmresolution && exist([ea_space,'.aug_tpm'],'file')
+if exist([ea_space,'TPM.nii'],'file') && ~ea_checktpmresolution && exist([ea_space,'.tpm'],'file')
     return
 end
 if ~exist('mute','var')
@@ -16,10 +16,13 @@ load([ea_space,'ea_space_def.mat']);
 if ~exist([ea_space,'dartel'], 'dir')
     mkdir([ea_space,'dartel']);
 end
+
+% TPM Lorio Draganski to be kept in 'templates' folder since will be used to generate TPM in each space.
 tpmfile=[ea_getearoot,'templates',filesep,'TPM_Lorio_Draganski.nii'];
+
 rebuildtpm=1;
 if isfield(spacedef,'tpm')
-    
+
     switch spacedef.tpm
         case 'custom_fixed'
             tpmfile=[ea_space,'TPM.nii'];
@@ -27,14 +30,18 @@ if isfield(spacedef,'tpm')
         case 'custom_rebuild'
             tpmfile=[ea_space,'TPM.nii'];
             rebuildtpm=1;
-            if exist([ea_space,'raw_TPM.nii'],'file')
-                copyfile([ea_space,'raw_TPM.nii'],[ea_space,'TPM.nii']);
-            else
-                copyfile([ea_space,'TPM.nii'],[ea_space,'raw_TPM.nii']);
-            end
+
+            ea_backuprestore([ea_space,'TPM.nii']);
     end
 end
-tpn=ea_open_vol(tpmfile);
+
+tpmHdr = ea_open_vol(tpmfile);
+tpmnum = tpmHdr.volnum;
+
+[~,ix]=ismember({'STN','GPi','GPe','RN'},spacedef.templates);
+if any(ix)
+    spacedef.templates(ix)=[];
+end
 
 if rebuildtpm
     for t=1:length(spacedef.templates)
@@ -43,12 +50,14 @@ if rebuildtpm
         matlabbatch{1}.spm.spatial.preproc.channel(t).biasfwhm = 60;
         matlabbatch{1}.spm.spatial.preproc.channel(t).write = [0 0];
     end
-    for tpspectr=1:length(tpn)
-        matlabbatch{1}.spm.spatial.preproc.tissue(tpspectr).tpm = {[tpmfile,',',num2str(tpspectr)]}; % This is correct ? TPM Lorio Draganski to be kept in /templates folder since will be used to generate TPM in each space.
+
+    for tpspectr=1:tpmnum
+        matlabbatch{1}.spm.spatial.preproc.tissue(tpspectr).tpm = {[tpmfile,',',num2str(tpspectr)]};
         matlabbatch{1}.spm.spatial.preproc.tissue(tpspectr).ngaus = 1;
         matlabbatch{1}.spm.spatial.preproc.tissue(tpspectr).native = [1 0];
         matlabbatch{1}.spm.spatial.preproc.tissue(tpspectr).warped = [0 0];
     end
+
     matlabbatch{1}.spm.spatial.preproc.warp.mrf = 1;
     matlabbatch{1}.spm.spatial.preproc.warp.cleanup = 1;
     matlabbatch{1}.spm.spatial.preproc.warp.reg = [0 0.001 0.5 0.05 0.2];
@@ -56,43 +65,39 @@ if rebuildtpm
     matlabbatch{1}.spm.spatial.preproc.warp.fwhm = 0;
     matlabbatch{1}.spm.spatial.preproc.warp.samp = 3;
     matlabbatch{1}.spm.spatial.preproc.warp.write = [0 0];
-    
+
     spm_jobman('run',{matlabbatch});
     clear matlabbatch
-    
-    delete([ea_space,spacedef.templates{1},'_seg8.mat']);
-    
+
+    ea_delete([ea_space,spacedef.templates{1},'_seg8.mat']);
 else
     % split TPM
     matlabbatch{1}.spm.util.split.vol = {[ea_space,'TPM.nii,1']};
     matlabbatch{1}.spm.util.split.outdir = {ea_space};
     spm_jobman('run',{matlabbatch});
     clear matlabbatch
-    
-    for t=1:length(tpn)
-       movefile([ea_space,'TPM_',sprintf('%05.f',t),'.nii'],[ea_space,'c',num2str(t),spacedef.templates{1},'.nii']); 
+
+    for t=1:tpmnum
+       movefile([ea_space,'TPM_',sprintf('%05.f',t),'.nii'],[ea_space,'c',num2str(t),spacedef.templates{1},'.nii']);
     end
 end
-for c=1:length(tpn)
+
+for c=1:tpmnum
     if c<3
        copyfile([ea_space,'c',num2str(c),spacedef.templates{1},'.nii'],[ea_space,'c',num2str(c),'mask.nii']);
     end
-    movefile([ea_space,'c',num2str(c),spacedef.templates{1},'.nii'],[ea_space([],'dartel'),filesep,'dartelmni_6_hires_',sprintf('%05d',c),'.nii']); 
+    movefile([ea_space,'c',num2str(c),spacedef.templates{1},'.nii'],[ea_space([],'dartel'),filesep,'dartelmni_6_hires_',sprintf('%05d',c),'.nii']);
 end
-
-
 
 prefs=ea_prefs('');
 if ~strcmp(spacedef.tpm(1:6),'custom')
-    
-    for c=1:length(tpn)
-        
+    for c=1:tpmnum
         fina=[ea_space([],'dartel'),'dartelmni_6_hires_',sprintf('%05d',c),'.nii'];
         nii=ea_load_nii(fina); % change datatype to something high for reslicing and smoothing.
         nii.dt=[16,0];
         ea_write_nii(nii);
         if ~(prefs.normalize.spm.resolution==0.5) % reslice images
-            ea_reslice_nii(fina,fina,[prefs.normalize.spm.resolution prefs.normalize.spm.resolution prefs.normalize.spm.resolution],1,[],6);
+            ea_reslice_nii(fina,fina,ones(1,3)*prefs.normalize.spm.resolution,1,[],1);
         end
         % apply very light smooth on custom TPMs
         job{1}.spm.spatial.smooth.data = {fina};
@@ -104,36 +109,32 @@ if ~strcmp(spacedef.tpm(1:6),'custom')
         clear job
         [pth,fn,ext]=fileparts(fina);
         movefile(fullfile(pth,['s',fn,ext]),fullfile(pth,[fn,ext]));
-        
+
         nii=ea_load_nii(fina); % change datatype back to uint8
         nii.dt=[2,0];
-        delete(fina);
+        ea_delete(fina);
         ea_write_nii(nii);
-        
+
         matlabbatch{1}.spm.util.cat.vols{c} = fina;
     end
-    
+
     matlabbatch{1}.spm.util.cat.vols = matlabbatch{1}.spm.util.cat.vols';
-    
+
     matlabbatch{1}.spm.util.cat.name = [ea_space,'TPM.nii'];
     matlabbatch{1}.spm.util.cat.dtype = 16;
     spm_jobman('run',{matlabbatch});
     clear matlabbatch
-    delete([ea_space,'TPM.mat']);
+    ea_delete([ea_space,'TPM.mat']);
 end
 
-
-
-
 % make sure TPM sums to 1 everywhere
-
 nii=ea_load_untouch_nii([ea_space,'TPM.nii']);
 nii.img=nii.img./repmat(sum(nii.img,4),1,1,1,6);
 ea_save_untouch_nii(nii,[ea_space,'TPM.nii']);
 
-wd=[ea_space([],'dartel')];
-%gunzip([wd,'dartelmni_6_hires.nii.gz']);
-%spm_file_split([wd,'dartelmni_6_hires.nii']);
+wd=ea_space([],'dartel');
+% gunzip([wd,'dartelmni_6_hires.nii.gz']);
+% spm_file_split([wd,'dartelmni_6_hires.nii']);
 gs=[0,2,3,5,6,8];
 expo=6:-1:1;
 spacedef=ea_getspacedef;
@@ -176,7 +177,7 @@ for s=1:6
     end
 
     for tpm=1:dpres
-    matlabbatch{1}.spm.util.cat.vols{tpm} = [wd,'s',num2str(gs(s)),'dartelmni_6_hires_',sprintf('%05d',tpm),'.nii'];
+        matlabbatch{1}.spm.util.cat.vols{tpm} = [wd,'s',num2str(gs(s)),'dartelmni_6_hires_',sprintf('%05d',tpm),'.nii'];
     end
     matlabbatch{1}.spm.util.cat.vols=matlabbatch{1}.spm.util.cat.vols';
     matlabbatch{1}.spm.util.cat.name = [wd,'dartelmni_',num2str(expo(s)),'.nii'];
@@ -188,85 +189,84 @@ for s=1:6
     disp('Cleaning up.');
 
     % cleanup
-    delete([wd,'s',num2str(gs(s)),'dartelmni_6_hires_00*.*']);
+    ea_delete([wd,'s',num2str(gs(s)),'dartelmni_6_hires_00*.*']);
 end
 
 % further cleanup
-delete([wd,'dartelmni_*.mat']);
-for c=1:length(tpn)
-    delete([wd,'dartelmni_6_hires_',sprintf('%05d',c),'.nii']);
+ea_delete([wd,'dartelmni_*.mat']);
+for c=1:tpmnum
+    ea_delete([wd,'dartelmni_6_hires_',sprintf('%05d',c),'.nii']);
 end
-%gzip([wd,'dartelmni_6_hires.nii']);
-%delete([wd,'dartelmni_6_hires.nii']);
+% gzip([wd,'dartelmni_6_hires.nii']);
+% ea_delete([wd,'dartelmni_6_hires.nii']);
 disp('Done.');
 
 ea_addshoot;
 
-
-%Finalize TPM
-% Split TPM:
-        matlabbatch{1}.spm.util.split.vol = {[ea_space,'TPM.nii,1']};
-        matlabbatch{1}.spm.util.split.outdir = {ea_space};
-        spm_jobman('run',{matlabbatch});
-        clear matlabbatch
-        
-        copyfile([ea_space,'atlas.nii'],[ea_space,'catlas.nii']);
-        ea_conformspaceto([ea_space,'TPM_',sprintf('%05d',1),'.nii'],[ea_space,'catlas.nii'],1);
-        
-        c1=ea_load_nii([ea_space,'TPM_',sprintf('%05d',1),'.nii']);
-        if exist([ea_space,'atlas.nii'],'file') % add atlas.
-            
-            atlas=ea_load_nii([ea_space,'catlas.nii']);
-            c1.img(atlas.img>0.1)=atlas.img(atlas.img>0.1);
-            ea_write_nii(c1);
-            c2=ea_load_nii([ea_space,'TPM_',sprintf('%05d',2),'.nii']);
-            c2.img(atlas.img>0.1)=0;
-            ea_write_nii(c2);
-            c3=ea_load_nii([ea_space,'TPM_',sprintf('%05d',3),'.nii']);
-            c3.img(atlas.img>0.1)=0;
-            ea_write_nii(c3);
-            
-        end
-    
-        matlabbatch{1}.spm.spatial.smooth.data = {
-            [ea_space,'TPM_00001.nii,1']
-            [ea_space,'TPM_00002.nii,1']
-            [ea_space,'TPM_00003.nii,1']
-            [ea_space,'TPM_00004.nii,1']
-            [ea_space,'TPM_00005.nii,1']
-            [ea_space,'TPM_00006.nii,1']
-            };
-        matlabbatch{1}.spm.spatial.smooth.fwhm = [3 3 3];
-        matlabbatch{1}.spm.spatial.smooth.dtype = 0;
-        matlabbatch{1}.spm.spatial.smooth.im = 0;
-        matlabbatch{1}.spm.spatial.smooth.prefix = 's';
-        spm_jobman('run',{matlabbatch}); clear matlabbatch
-        
-        matlabbatch{1}.spm.util.cat.vols = {
-            [ea_space,'sTPM_00001.nii,1']
-            [ea_space,'sTPM_00002.nii,1']
-            [ea_space,'sTPM_00003.nii,1']
-            [ea_space,'sTPM_00004.nii,1']
-            [ea_space,'sTPM_00005.nii,1']
-            [ea_space,'sTPM_00006.nii,1']
-            };
-        matlabbatch{1}.spm.util.cat.name = [ea_space,'TPM.nii'];
-        matlabbatch{1}.spm.util.cat.dtype = 16;
-    spm_jobman('run',{matlabbatch}); clear matlabbatch
-% make sure TPM sums to 1 everywhere
-
-nii=ea_load_untouch_nii([ea_space,'TPM.nii']);
-nii.img=nii.img./repmat(sum(nii.img,4),1,1,1,6);
-ea_save_untouch_nii(nii,[ea_space,'TPM.nii']);
-
-delete([ea_space,'*PM_0*.nii']);
-delete([ea_space,'TPM.mat']);
-try
-delete([ea_space,'catlas.nii']);
-end
+% %Finalize TPM
+% % Split TPM:
+%         matlabbatch{1}.spm.util.split.vol = {[ea_space,'TPM.nii,1']};
+%         matlabbatch{1}.spm.util.split.outdir = {ea_space};
+%         spm_jobman('run',{matlabbatch});
+%         clear matlabbatch
+%
+%         copyfile([ea_space,'atlas.nii'],[ea_space,'catlas.nii']);
+%         ea_conformspaceto([ea_space,'TPM_',sprintf('%05d',1),'.nii'],[ea_space,'catlas.nii'],1);
+%
+%         c1=ea_load_nii([ea_space,'TPM_',sprintf('%05d',1),'.nii']);
+%         if exist([ea_space,'atlas.nii'],'file') % add atlas.
+%
+%             atlas=ea_load_nii([ea_space,'catlas.nii']);
+%             c1.img(atlas.img>0.1)=atlas.img(atlas.img>0.1);
+%             ea_write_nii(c1);
+%             c2=ea_load_nii([ea_space,'TPM_',sprintf('%05d',2),'.nii']);
+%             c2.img(atlas.img>0.1)=0;
+%             ea_write_nii(c2);
+%             c3=ea_load_nii([ea_space,'TPM_',sprintf('%05d',3),'.nii']);
+%             c3.img(atlas.img>0.1)=0;
+%             ea_write_nii(c3);
+%
+%         end
+%
+%         matlabbatch{1}.spm.spatial.smooth.data = {
+%             [ea_space,'TPM_00001.nii,1']
+%             [ea_space,'TPM_00002.nii,1']
+%             [ea_space,'TPM_00003.nii,1']
+%             [ea_space,'TPM_00004.nii,1']
+%             [ea_space,'TPM_00005.nii,1']
+%             [ea_space,'TPM_00006.nii,1']
+%             };
+%         matlabbatch{1}.spm.spatial.smooth.fwhm = [3 3 3];
+%         matlabbatch{1}.spm.spatial.smooth.dtype = 0;
+%         matlabbatch{1}.spm.spatial.smooth.im = 0;
+%         matlabbatch{1}.spm.spatial.smooth.prefix = 's';
+%         spm_jobman('run',{matlabbatch}); clear matlabbatch
+%
+%         matlabbatch{1}.spm.util.cat.vols = {
+%             [ea_space,'sTPM_00001.nii,1']
+%             [ea_space,'sTPM_00002.nii,1']
+%             [ea_space,'sTPM_00003.nii,1']
+%             [ea_space,'sTPM_00004.nii,1']
+%             [ea_space,'sTPM_00005.nii,1']
+%             [ea_space,'sTPM_00006.nii,1']
+%             };
+%         matlabbatch{1}.spm.util.cat.name = [ea_space,'TPM.nii'];
+%         matlabbatch{1}.spm.util.cat.dtype = 16;
+%     spm_jobman('run',{matlabbatch}); clear matlabbatch
+% % make sure TPM sums to 1 everywhere
+%
+% nii=ea_load_untouch_nii([ea_space,'TPM.nii']);
+% nii.img=nii.img./repmat(sum(nii.img,4),1,1,1,6);
+% ea_save_untouch_nii(nii,[ea_space,'TPM.nii']);
+%
+% ea_delete([ea_space,'*PM_0*.nii']);
+% ea_delete([ea_space,'TPM.mat']);
+% try
+%     ea_delete([ea_space,'catlas.nii']);
+% end
 
 % set marker that last gen TPM has been set.
-fid=fopen([ea_space,'.aug_tpm'],'w');
+fid=fopen([ea_space,'.tpm'],'w');
 fprintf(fid,'%s','Novel TPM generated by Lead Neuroimaging Suite.');
 fclose(fid);
 
@@ -307,8 +307,8 @@ end
         clear matlabbatch
 
         for i=1:dpres+1 % cleanup
-            delete([root,'dartelmni_',num2str(dt),'_',sprintf('%05.0f',i),'.nii']);
+            ea_delete([root,'dartelmni_',num2str(dt),'_',sprintf('%05.0f',i),'.nii']);
         end
-        delete([root,'shootmni_',num2str(dt),'.mat']);
+        ea_delete([root,'shootmni_',num2str(dt),'.mat']);
     end
 %end

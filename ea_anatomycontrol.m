@@ -79,12 +79,10 @@ if isempty(ht)
     c_step=2;
     minuscontrast=uipushtool(ht,'CData',ea_get_icn('contrastminus'),'TooltipString','Decrease Contrast','ClickedCallback',{@setslidecontrast,'c',-0.1,resultfig,handles});
     pluscontrast=uipushtool(ht,'CData',ea_get_icn('contrastplus'),'TooltipString','Increase Contrast','ClickedCallback',{@setslidecontrast,'c',0.1,resultfig,handles});
-    minusoffset=uipushtool(ht,'CData',ea_get_icn('extleft'),'TooltipString','Decrease Offset','ClickedCallback',{@setslidecontrast,'o',-0.1,resultfig,handles});
-    plusoffset=uipushtool(ht,'CData',ea_get_icn('extright'),'TooltipString','Increase Offset','ClickedCallback',{@setslidecontrast,'o',0.1,resultfig,handles});
+    minusbrightness=uipushtool(ht,'CData',ea_get_icn('brightnessminus'),'TooltipString','Decrease Brightness','ClickedCallback',{@setslidecontrast,'o',-0.1,resultfig,handles});
+    plusbrightnesst=uipushtool(ht,'CData',ea_get_icn('brightnessplus'),'TooltipString','Increase Brightness','ClickedCallback',{@setslidecontrast,'o',0.1,resultfig,handles});
     setappdata(handles.acontrolfig,'toolbar',ht);
 end
-
-
 
 spacedef=ea_getspacedef;
 if isfield(spacedef,'guidef')
@@ -148,9 +146,7 @@ end
 pos=get(hObject,'position');
 set(hObject,'position',[0,0,pos(3),pos(4)]);
 refreshresultfig(handles)
-view(142,13.6)
 set(handles.acontrolfig,'Visible',options.d3.verbose); % set invisible if called from lead group
-
 
 
 % --- Outputs from this function are returned to the command line.
@@ -441,7 +437,7 @@ switch contrastoffset
     case 'c' % contrast
         sc.c=sc.c+posneg;
     case 'o' % offset
-        sc.o=sc.o+posneg;
+        sc.o=sc.o+posneg*0.2;
 end
 setappdata(resultfig,'slidecontrast',sc);
 

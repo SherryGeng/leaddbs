@@ -1,5 +1,5 @@
 function varargout=ea_normalize_schoenecker(options)
-% This is a function that normalizes both a copy of transversal and coronar
+% This is a function that normalizes both a copy of transversal and coronal
 % images into MNI-space. The goal was to make the procedure both robust and
 % automatic, but still, it must be said that normalization results should
 % be taken with much care because all reconstruction results heavily depend
@@ -28,7 +28,7 @@ end
 usefa=1;
 usebrainmask=0;
 
-ea_checkcoregallmri(options,usebrainmask)
+%ea_checkcoregallmri(options,usebrainmask)
 
 directory=[options.root,options.patientname,filesep];
 cnt=1;
@@ -157,21 +157,6 @@ bm.img=bm.img>0.6;
 spm_write_vol(bm,bm.img);
 
 
-function ea_maskimg(options,file,prefix)
-directory=[options.root,options.patientname,filesep];
-if ~exist([directory,'brainmask.nii'],'file')
-	ea_genbrainmask(options);
-end
-[pth,fn,ext]=fileparts(file);
-if ~exist([pth,filesep,prefix,fn,ext],'file')
-    nii=ea_load_nii(file);
-    bm=ea_load_nii([directory,'brainmask.nii']);
-    nii.img=nii.img.*double(bm.img);
-    nii.fname=[pth,filesep,prefix,fn,ext];
-    spm_write_vol(nii,nii.img);
-end
-
-
 function template2use=ea_det_to(anatfile,spacedef)
 
 anatfile=strrep(anatfile,'anat_','');
@@ -189,4 +174,3 @@ if ~isempty(spacedef.misfit_template)
 else
     template2use='';
 end
-

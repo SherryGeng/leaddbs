@@ -1,5 +1,5 @@
 function varargout=ea_normalize_spmseg_macaque(options)
-% This is a function that normalizes both a copy of transversal and coronar
+% This is a function that normalizes both a copy of transversal and coronal
 % images into MNI-space. The goal was to make the procedure both robust and
 % automatic, but still, it must be said that normalization results should
 % be taken with much care because all reconstruction results heavily depend
@@ -28,7 +28,7 @@ if ischar(options) % return name of method.
 end
 
 warning('off');
-usecombined=0; % if set, LEAD will try to fuse coronar and transversal images before normalizing them.
+usecombined=0; % if set, LEAD will try to fuse coronal and transversal images before normalizing them.
 usesegmentnew=0;
 costfuns={'nmi','mi','ecc','ncc'};
 
@@ -137,23 +137,23 @@ for export=expdo
         case 2
             outf=options.prefs.tranii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.tranii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.tranii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.tranii_unnormalized];
         case 3
             outf=options.prefs.cornii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.cornii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.cornii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.cornii_unnormalized];
         case 4
             outf=options.prefs.sagnii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.sagnii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.sagnii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.sagnii_unnormalized];
         case 5
             outf=options.prefs.prenii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.prenii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.prenii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.prenii_unnormalized];
         case 6 % CT
             outf=options.prefs.ctnii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.ctnii_coregistered];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.ctnii_coregistered,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.ctnii_coregistered];
     end
 
 [~,nm]=fileparts(options.prefs.prenii_unnormalized); % cut off file extension
@@ -222,23 +222,23 @@ for export=expdo
         case 2
             outf=options.prefs.gtranii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.tranii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.tranii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.tranii_unnormalized];
         case 3
             outf=options.prefs.gcornii;
                         fina=[options.root,options.prefs.patientdir,filesep,options.prefs.cornii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.cornii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.cornii_unnormalized];
         case 4
             outf=options.prefs.gsagnii;
                         fina=[options.root,options.prefs.patientdir,filesep,options.prefs.sagnii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.sagnii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.sagnii_unnormalized];
         case 5
             outf=options.prefs.gprenii;
             fina=[options.root,options.prefs.patientdir,filesep,options.prefs.prenii_unnormalized];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.prenii_unnormalized,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.prenii_unnormalized];
         case 6 % CT
             outf=options.prefs.gctnii;
                         fina=[options.root,options.prefs.patientdir,filesep,options.prefs.ctnii_coregistered];
-            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.ctnii_coregistered,',1'];
+            wfina=[options.root,options.prefs.patientdir,filesep,'w',options.prefs.ctnii_coregistered];
     end
 
     [~,nm]=fileparts(options.prefs.prenii_unnormalized); % cut off file extension

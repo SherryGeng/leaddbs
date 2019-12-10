@@ -1,14 +1,32 @@
-function ea_screenshot(outn)
+function ea_screenshot(outn,method)
+if ~exist('method','var')
+    method='exportfig';
+end
+switch method
+    case {'exportfig','ld','hd','transparent'}
+        warning('off');
+        if strcmp(method,'ld')
+            export_fig(outn,'-m1','-a4');
+        else
+            if  strcmp(method,'transparent')
+                export_fig(outn,'-m2.5','-a4','-transparent');
+            else
+                export_fig(outn,'-m2.5','-a4');
+            end
+        end
+        warning('on');
+    case 'myaa'
+        set(gcf, 'Color', [1,1,1]);
+        [~, cdata] = myaa_hd([4, 2]);
 
-set(gcf, 'Color', [1,1,1]);
-[~, cdata] = myaa_hd([4, 2]);
-
-imwrite(cdata, outn, 'png');
+        imwrite(cdata, outn, 'png');
+end
 
 
 function res=zminus(A,B)
 res=A-B;
 if res<0; res=0; end
+
 
 function [varargout] = myaa_hd(varargin)
 % This function has been slightly modified for export use in LEAD-DBS.
@@ -227,7 +245,6 @@ elseif strcmp(self.figmode,'lazyupdate');
 end
 
 %% Store current state
-
 set(gcf,'userdata',self);
 set(gcf,'KeyPressFcn',@keypress);
 set(gcf,'Interruptible','off');
@@ -240,6 +257,7 @@ elseif nargout == 2
     varargout(2) = {get(hi, 'CData')};
     close(self.myaa_figure);
 end
+
 
 %% A simple lowpass filter kernel (Butterworth).
 % sz is the size of the filter
@@ -254,6 +272,7 @@ rr = sqrt(ii.^2+jj.^2);
 kk = ifftshift(1./(1+(rr./cut_frequency).^(2*n)));
 kk = fftshift(real(ifft2(kk)));
 kk = kk./sum(kk(:));
+
 
 function keypress(src,evnt)
 if isempty(evnt.Character)

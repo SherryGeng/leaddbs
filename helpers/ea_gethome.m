@@ -6,9 +6,11 @@ else
     home = getenv('HOME');
 end
 
-home = [home, filesep];
+if ~strcmp(home(end), filesep)
+    home = [home, filesep];
+end
 
 if isdeployed
    mkdir([ctfroot, filesep, 'home', filesep]);
-   home=[ctfroot, filesep, 'home', filesep];
+   home = [ctfroot, filesep, 'home', filesep];
 end

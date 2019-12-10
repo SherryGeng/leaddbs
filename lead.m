@@ -84,7 +84,7 @@ ea_checkleaddirs;
 
 % check for commands first
 if nargin>3
-    switch varargin{1}
+    switch lower(varargin{1})
         case {'dbs', '-d', 'd'}
             lead_dbs;
             delete(handles.leadfigure)
@@ -97,16 +97,24 @@ if nargin>3
             lead_group_connectome;
             delete(handles.leadfigure)
             return
-        case {'connectome', '-c', 'c'}
+        case {'connectome', 'conn', '-c', 'c'}
             lead_connectome;
             delete(handles.leadfigure)
             return
-        case {'mapper', '-m', 'm'}
+        case {'mapper','connectomemapper', '-m', 'm'}
             lead_mapper;
+            delete(handles.leadfigure)
+            return
+        case {'or', '-o', 'o'}
+            lead_or;
             delete(handles.leadfigure)
             return
         case {'anatomy', '-a', 'a'}
             lead_anatomy;
+            delete(handles.leadfigure)
+            return
+        case {'predict', '-p', 'p'}
+            lead_predict;
             delete(handles.leadfigure)
             return
         case {'version', '-v', 'v'}

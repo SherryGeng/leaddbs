@@ -1,5 +1,5 @@
 function varargout=ea_normalize_spmshoot(options)
-% This is a function that normalizes both a copy of transversal and coronar
+% This is a function that normalizes both a copy of transversal and coronal
 % images into MNI-space. The goal was to make the procedure both robust and
 % automatic, but still, it must be said that normalization results should
 % be taken with much care because all reconstruction results heavily depend
@@ -145,7 +145,7 @@ ea_apply_normalization(options)
 cits={
     'Ashburner, J., & Friston, K. J. (2005). Unified segmentation., 26(3), 839?851. http://doi.org/10.1016/j.neuroimage.2005.02.018'
     'Ashburner, J., & Friston, K. J. (2011). Diffeomorphic registration using geodesic shooting and Gauss?Newton optimisation. NeuroImage, 55(3), 954?967. http://doi.org/10.1016/j.neuroimage.2010.12.049'
-    'Horn, A., & Kühn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127?135. http://doi.org/10.1016/j.neuroimage.2014.12.002'
+    'Horn, A., & Kuehn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127?135. http://doi.org/10.1016/j.neuroimage.2014.12.002'
     };
 if ~isempty(lcit)
     cits=[cits;{lcit}];

@@ -1,12 +1,11 @@
 function ea_write(options)
 
-if options.scrf
-	ea_subcorticalrefine(options);
-end
-
 try
     ea_updatemodel(options);
 end
+
+% check if sides is specified correctly for visualization:
+options=ea_detsides(options);
 
 if options.d2.write || options.d3.write
    if strcmp(options.atlasset,'Segment patient anatomy')
@@ -55,14 +54,14 @@ if options.d3.write
     end
 
     % save scene as matlab figure
-%     try % if path is not defined, don't save.
-%         savefig(resultfig,[options.root,options.patientname,filesep,'LEAD_scene.fig'],'compact');
-%     end
-%     figure2xhtml([options.root,options.patientname,filesep,'eAuto_scene'],resultfig);
+    % try % if path is not defined, don't save.
+    %     savefig(resultfig,[options.root,options.patientname,filesep,'LEAD_scene.fig'],'compact');
+    % end
+    % figure2xhtml([options.root,options.patientname,filesep,'eAuto_scene'],resultfig);
 
     if options.d3.autoserver
-       ea_export_server([],[],options);
-       close(resultfig);
+        ea_export_server([],[],options);
+        close(resultfig);
     end
 end
 

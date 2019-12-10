@@ -9,7 +9,7 @@ end
 switch type
     case 'tract'
         % open dialog
-        [fina,pana]=uigetfile('*.mat','Choose Fibertract to add to scene...',[options.root,options.patientname,filesep],'MultiSelect','on');
+        [fina,pana]=uigetfile({'*.mat;*.trk', 'Fiber Files (*.mat,*.trk)'},'Choose Fibertract to add to scene...',[options.root,options.patientname,filesep],'MultiSelect','on');
         if isempty(fina) % user pressed cancel.
             return
         end
@@ -23,16 +23,10 @@ switch type
             end
             addfibertract([pana,fina],resultfig,addht,fina,[],0,options);
         end
-
     case 'roi' % atlas
-
         % open dialog
         [fina,pana]=uigetfile({'*.nii';'*.nii.gz'},'Choose .nii image to add to scene...',[options.root,options.patientname,filesep],'MultiSelect','on');
-
-
-
         if iscell(fina) % multiple files
-
             for fi=1:length(fina)
                 addroi([pana,fina{fi}],resultfig,addht,fina{fi},options);
             end
@@ -42,22 +36,17 @@ switch type
             end
             addroi([pana,fina],resultfig,addht,fina,options);
         end
-
-
     case 'tractmap'
         [tfina,tpana]=uigetfile('*.mat','Choose Fibertract to add to scene...',[options.root,options.patientname,filesep],'MultiSelect','off');
         [rfina,rpana]=uigetfile({'*.nii';'*.nii.gz'},'Choose .nii image to colorcode tracts...',[options.root,options.patientname,filesep],'MultiSelect','off');
         addtractweighted([tpana,tfina],[rpana,rfina],resultfig,addht,tfina,rfina,options)
-
-
 end
 
 axis fill
 
 
-
-
 function addtractweighted(tract,weight,resultfig,addht,tfina,rfina,options)
+
 disp('Loading fibertracts...');
 [fibers,idx,voxmm,mat]=ea_loadfibertracts(tract);
 disp('Done.');
@@ -120,7 +109,6 @@ fv=ea_concatfv(fv);
 addobjr=patch(fv,'Facecolor', 'interp', 'EdgeColor', 'none','FaceAlpha',0.3);
 
 % add toggle button:
-
 addbutn=uitoggletool(addht,'CData',ea_get_icn('fiber'),'TooltipString',[tfina,' weighted by ',rfina],'OnCallback',{@ea_atlasvisible,addobjr},'OffCallback',{@ea_atlasinvisible,addobjr},'State','on');
 %storeinfigure(resultfig,addht,addbutn,addobjr,addobj,fina,'roi',XYZ,0,options); % store rendering in figure.
 drawnow
@@ -132,16 +120,20 @@ disp('Done.');
 function addroi(addobj,resultfig,addht,fina,options)
 
 % set cdata
-c=uisetcolor;
+c = ea_uisetcolor;
+
+if numel(c)==1 && c==0
+    return;
+end
 
 % load nifti
 nii=ea_load_nii(addobj);
 nii.img(isnan(nii.img))=0;
-if ~all(abs(nii.voxsize)<=1)
-    ea_reslice_nii(addobj,addobj,[0.5,0.5,0.5],0,[],3);
-    nii=ea_load_nii(addobj);
-end
-%nii.img=round(nii.img);
+% if ~all(abs(nii.voxsize)<=1)
+%     ea_reslice_nii(addobj,addobj,[0.5,0.5,0.5],0,[],3);
+%     nii=ea_load_nii(addobj);
+% end
+% nii.img=round(nii.img);
 
 [xx,yy,zz]=ind2sub(size(nii.img),find(nii.img>0)); %(mean(nii.img(nii.img~=0))/3))); % find 3D-points that have correct value.
 
@@ -169,14 +161,11 @@ fv.faces=[fv.faces;fvc.faces+size(fv.vertices,1)];
 fv.vertices=[fv.vertices;fvc.vertices];
 
 if ischar(options.prefs.hullsimplify)
-
     % get to 700 faces
     simplify=700/length(fv.faces);
     fv=reducepatch(fv,simplify);
-
 else
     if options.prefs.hullsimplify<1 && options.prefs.hullsimplify>0
-
         fv=reducepatch(fv,options.prefs.hullsimplify);
     elseif options.prefs.hullsimplify>1
         simplify=options.prefs.hullsimplify/length(fv.faces);
@@ -184,8 +173,19 @@ else
     end
 end
 
-
-
+try
+    fv=ea_smoothpatch(fv,1,35);
+catch
+    try
+        cd([ea_getearoot,'ext_libs',filesep,'smoothpatch']);
+        mex ea_smoothpatch_curvature_double.c -v
+        mex ea_smoothpatch_inversedistance_double.c -v
+        mex ea_vertex_neighbours_double.c -v
+        fv=ea_smoothpatch(fv);
+    catch
+        warndlg('Patch could not be smoothed. Please supply a compatible Matlab compiler to smooth VTAs.');
+    end
+end
 
 %?atlasc=59; %rand*64;
 jetlist=jet;
@@ -196,8 +196,6 @@ atlasc=double(rgb2ind(co,jetlist));
 
 cdat=abs(repmat(atlasc,length(fv.vertices),1) ... % C-Data for surface
     +randn(length(fv.vertices),1)*2)';
-
-
 
 % show atlas.
 set(0,'CurrentFigure',resultfig);
@@ -210,72 +208,91 @@ addbutn=uitoggletool(addht,'CData',ea_get_icn('atlas',c),'TooltipString',fina,'O
 storeinfigure(resultfig,addht,addbutn,addobjr,addobj,fina,'roi',XYZ,0,options); % store rendering in figure.
 drawnow
 
+
 function addfibertract(addobj,resultfig,addht,fina,connect,ft,options)
 if ischar(addobj) % filename is given ? load fibertracts.
-    [thisset,fibidx]=ea_loadfibertracts(addobj);
+    if strfind(addobj,'.mat')
+        load(addobj);
+        if exist('fibsin', 'var')
+            fibers = fibsin;
+            clear fibsin
+        end
+        if exist('fibers', 'var')
+            if size(fibers,1) < size(fibers,2)
+                fibers = fibers';
+            end
+            if size(fibers,2) == 4
+                thisset = fibers(:,1:3);
+                [~,~,idx] = unique(fibers(:,4));
+                fibidx = accumarray(idx,1);
+            elseif size(fibers,2) == 3
+                thisset = fibers;
+                fibidx = idx;
+            else
+                error('Wrong input fiber tracts format!');
+            end
+            clear fibers idx
+        else
+            error('No fiber tracts found!');
+        end
+    elseif strfind(addobj,'.trk')
+        fileOut = [addobj(1:end-3) 'mat'];
+        disp('Converting .trk to ftr.')
+        [thisset,fibidx] = ea_trk2ftr(addobj);
+        thisset = thisset';
+    else
+        error('File is neither a .mat nor .trk!')
+    end
 else % fibers are already loaded and stored in figure.
     thisset=addobj.fibs;
     fibidx=addobj.idx;
 end
 
-
 fib_copy.fibs=thisset; % backup of whole original fiberset will be stored in figure.
 fib_copy.idx=fibidx;
 
-
-
 if ~isempty(connect) % select fibers based on connecting roi info (i.e. delete all other fibers).
-
-
-    for roi=1:length(connect.rois) % check connectivities..
-
-
+    for roi=1:length(connect.rois) % check connectivities
         in=inhull(thisset,connect.xyz{roi})';
-
+        idxv = repelem(1:numel(fibidx), fibidx)';
         selectedfibs{roi}=unique(idxv(in));
-
     end
-
     selectedfibs=unique(cell2mat(selectedfibs(:)));
-
     thisset=mat2cell(thisset,fibidx,3)';
     thisset=thisset(selectedfibs); % choose selected fibers.
-
-
-
 end
 
-dispercent(0,'Plotting fibers');
+%% OLD visualization part:
+% fibmax=length(thisset);
+% keyboard
+% for fib=1:fibmax
+%     dispercent(fib/fibmax);
+%
+%     if size(thisset{fib},1)~=3
+%         thisset{fib}=thisset{fib}';
+%     end
+%     try
+%     thisset{fib}(4,:)=detcolor(thisset{fib}); % add coloring information to the 4th column.
+%     catch
+%         thisset{fib}(4,:)=0; % fiber has only one entry.
+%     end
+%     for dim=1:4
+%         thisfib(dim,:)=double(interp1q([1:size(thisset{fib},2)]',thisset{fib}(dim,:)',[1:0.1:size(thisset{fib},2)]')');
+%     end
+%     addobjr(fib)=surface([thisfib(1,:);thisfib(1,:)],...
+%         [thisfib(2,:);thisfib(2,:)],...
+%         [thisfib(3,:);thisfib(3,:)],...
+%         [thisfib(4,:);thisfib(4,:)],'facecol','no','edgecol','interp','linew',1.5);
+%     clear thisfib
+%
+% end
 
-% visualization part:
-fibmax=length(thisset);
-keyboard
-for fib=1:fibmax
-    dispercent(fib/fibmax);
-
-    if size(thisset{fib},1)~=3
-        thisset{fib}=thisset{fib}';
-    end
-    try
-    thisset{fib}(4,:)=detcolor(thisset{fib}); % add coloring information to the 4th column.
-    catch
-        thisset{fib}(4,:)=0; % fiber has only one entry.
-    end
-    for dim=1:4
-        thisfib(dim,:)=double(interp1q([1:size(thisset{fib},2)]',thisset{fib}(dim,:)',[1:0.1:size(thisset{fib},2)]')');
-    end
-    addobjr(fib)=surface([thisfib(1,:);thisfib(1,:)],...
-        [thisfib(2,:);thisfib(2,:)],...
-        [thisfib(3,:);thisfib(3,:)],...
-        [thisfib(4,:);thisfib(4,:)],'facecol','no','edgecol','interp','linew',1.5);
-    clear thisfib
-
+%% new visualization part
+c = ea_uisetcolor;
+if c == 0
+    c=NaN;
 end
-dispercent(100,'end');
-
-
-set(addobjr(:),'EdgeAlpha',0.05);
-
+addobjr=ea_showfiber(thisset,fibidx,c);
 
 axis fill
 
@@ -312,23 +329,23 @@ end
 switch type
     case 'tract'
         if replace % fibertract has been there before and has now been selected to be plotted connecting to a roi.
-        AL.FTS{replace}=obj;
-        AL.FTSNAMES{replace}=name;
-        AL.FTSFILES{replace}=path;
-        AL.FTSBUTN{replace}=addbutn;
-%         for roi=1:length(AL.ROI) % add connectivity data
-%             AL.GUI.FTS(length(AL.FTS)).ROI(roi)=0;
-%         end
-        AL.FTSDATA{replace}=data;
+            AL.FTS{replace}=obj;
+            AL.FTSNAMES{replace}=name;
+            AL.FTSFILES{replace}=path;
+            AL.FTSBUTN{replace}=addbutn;
+            %         for roi=1:length(AL.ROI) % add connectivity data
+            %             AL.GUI.FTS(length(AL.FTS)).ROI(roi)=0;
+            %         end
+            AL.FTSDATA{replace}=data;
         else
             AL.FTS{end+1}=obj;
-        AL.FTSNAMES{end+1}=name;
-        AL.FTSFILES{end+1}=path;
-        AL.FTSBUTN{end+1}=addbutn;
-        for roi=1:length(AL.ROI) % add connectivity data
-            AL.GUI.FTS(length(AL.FTS)).ROI(roi)=0;
-        end
-        AL.FTSDATA{end+1}=data;
+            AL.FTSNAMES{end+1}=name;
+            AL.FTSFILES{end+1}=path;
+            AL.FTSBUTN{end+1}=addbutn;
+            for roi=1:length(AL.ROI) % add connectivity data
+                AL.GUI.FTS(length(AL.FTS)).ROI(roi)=0;
+            end
+            AL.FTSDATA{end+1}=data;
 
         end
     case 'roi'
@@ -337,7 +354,7 @@ switch type
         AL.ROIFILES{end+1}=path;
         AL.ROIDATA{end+1}=data;
         for ft=1:length(AL.FTS) % add connectivity data
-           AL.GUI.FTS(ft).ROI(end+1)=0;
+            AL.GUI.FTS(ft).ROI(end+1)=0;
         end
 end
 
@@ -358,8 +375,6 @@ if ~isempty(AL.FTS) % only build fibertracking menu if there is at least one fib
         end
     end
 end
-
-
 
 axis fill
 % store in figure.
@@ -388,7 +403,7 @@ setappdata(resultfig,'AL',AL);
 if isempty(connect.rois) % don't even send connect structure since this will save time.
     addfibertract(AL.FTSDATA{ft},resultfig,addht,AL.FTSNAMES{ft},[],ft,options)
 else
-addfibertract(AL.FTSDATA{ft},resultfig,addht,AL.FTSNAMES{ft},connect,ft,options)
+    addfibertract(AL.FTSDATA{ft},resultfig,addht,AL.FTSNAMES{ft},connect,ft,options)
 end
 
 
@@ -399,17 +414,13 @@ if bin
 end
 
 
-
-
-
-
-
 function coords=map_coords_proxy(XYZ,V)
 
 XYZ=[XYZ';ones(1,size(XYZ,1))];
 
 coords=V.mat*XYZ;
 coords=coords(1:3,:)';
+
 
 function indcol=detcolor(mat) % determine color based on traversing direction.
 

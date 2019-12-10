@@ -58,7 +58,7 @@
 #define MERSENNETWISTER_H
 
 #if __cplusplus > 199711L
-    #define register      // Deprecated in C++11.
+#define register      // Deprecated in C++11.
 #endif  // #if __cplusplus > 199711L
 
 // Not thread safe (unless auto-initialization is avoided and each thread has

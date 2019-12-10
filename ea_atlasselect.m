@@ -119,7 +119,8 @@ end
 try
     if ~isfield(atlases,'subgroups')
         atlases.subgroups(1).label='Structures';
-        atlases.subgroups(1).entries=1:length(atlases.names);
+        isdiscfibers = cellfun(@(x) ischar(x) && strcmp(x, 'discfibers'), atlases.pixdim);
+        atlases.subgroups(1).entries=find(~sum(isdiscfibers,2)');
     end
 catch
     keyboard
@@ -176,9 +177,13 @@ for subgroup=1:length(atlases.subgroups)
         h.sgsub{subgroup}{node}=DefaultCheckBoxNode(atlaslabel,true);
         h.sg{subgroup}.add(h.sgsub{subgroup}{node});
 
-        if (atlases.types(atlases.subgroups(subgroup).entries(node))==3) || (atlases.types(atlases.subgroups(subgroup).entries(node))==4) % need lh and rh entries
+        if (atlases.types(atlases.subgroups(subgroup).entries(node))==3) || (atlases.types(atlases.subgroups(subgroup).entries(node))==4) || (atlases.types(atlases.subgroups(subgroup).entries(node))==6) % need lh and rh entries
             [~,thistb]=ismember([thisatlfname,'_right'],tbcell);
-            checked=onoff2bool(togglebuttons(thistb).State);
+            try
+                checked=onoff2bool(togglebuttons(thistb).State);
+            catch
+                keyboard
+            end
             lrlabel = ['<HTML><BODY>' ...
                        '<FONT color=',color,' bgcolor=',color,'>ico</FONT>' ...
                        '<FONT color="black">&nbsp;&nbsp;RH</FONT>' ...

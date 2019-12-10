@@ -1,14 +1,14 @@
 function affinefile = ea_ants(varargin)
 % Wrapper for ANTs linear registration
 
-fixedimage=varargin{1};
-movingimage=varargin{2};
-outputimage=varargin{3};
+fixedimage = varargin{1};
+movingimage = varargin{2};
+outputimage = varargin{3};
 
 if nargin >= 4
-    writematout=varargin{4};
+    writeoutmat = varargin{4};
 else
-    writematout=1;
+    writeoutmat = 1;
 end
 
 if nargin >= 5
@@ -24,31 +24,31 @@ else
 end
 
 try
-    msks=varargin{6};
+    msks = varargin{6};
     if isempty(msks)
-        usemasks=0;
+        usemasks = 0;
     else
         if ~iscell(msks)
-            msks={};
-            usemasks=0;
+            msks = {};
+            usemasks = 0;
         else
-            usemasks=1;
+            usemasks = 1;
         end
     end
 catch
-    usemasks=0;
+    usemasks = 0;
 end
 
 try
-    options=varargin{7};
+    options = varargin{7};
 catch
-    options=struct;
+    options = struct;
 end
 
 try
-    interp=varargin{8};
+    interp = varargin{8};
 catch
-    interp='Linear';
+    interp = 'Linear';
 end
 
 outputbase = ea_niifileparts(outputimage);
@@ -58,11 +58,11 @@ basedir = [fileparts(mfilename('fullpath')), filesep];
 if ispc
     HEADER = ea_path_helper([basedir, 'PrintHeader.exe']);
     ANTS = ea_path_helper([basedir, 'antsRegistration.exe']);
-    antsApplyTransforms = ea_path_helper([basedir, 'antsApplyTransforms.exe']);
+    applyTransforms = ea_path_helper([basedir, 'antsApplyTransforms.exe']);
 else
     HEADER = [basedir, 'PrintHeader.', computer('arch')];
     ANTS = [basedir, 'antsRegistration.', computer('arch')];
-    antsApplyTransforms = [basedir, 'antsApplyTransforms.', computer('arch')];
+    applyTransforms = [basedir, 'antsApplyTransforms.', computer('arch')];
 end
 
 if ~ispc
@@ -202,8 +202,8 @@ antscmd = [ANTS, ' --verbose 1' ...
     ' --winsorize-image-intensities [0.005,0.995]', ...
     rigidstage, affinestage,mask1stage,mask2stage];
 
-if writematout % inverse only needed if matrix is written out.
-    invaffinecmd = [antsApplyTransforms, ' --verbose 1' ...
+if writeoutmat % inverse only needed if matrix is written out.
+    invaffinecmd = [applyTransforms, ' --verbose 1' ...
         ' --dimensionality 3 --float 1' ...
         ' --reference-image ', ea_path_helper(movingimage), ...
         ' --transform [', ea_path_helper([outputbase, '0GenericAffine.mat']),',1]' ...
@@ -212,13 +212,13 @@ end
 
 if ~ispc
     system(['bash -c "', antscmd, '"']);
-    if writematout
-    system(['bash -c "', invaffinecmd, '"']);
+    if writeoutmat
+        system(['bash -c "', invaffinecmd, '"']);
     end
 else
     system(antscmd);
-    if writematout
-    system(invaffinecmd);
+    if writeoutmat
+        system(invaffinecmd);
     end
 end
 
@@ -227,20 +227,21 @@ if ~isempty(otherfiles)
         [options.root,options.patientname]=fileparts(fileparts(otherfiles{ofi}));
         options.root=[options.root,filesep];
         options.prefs=ea_prefs(options.patientname);
-        ea_ants_applytransforms(options,otherfiles(ofi),otherfiles(ofi),0,fixedimage,[outputbase, '0GenericAffine.mat']);
+
+        ea_ants_apply_transforms(options,otherfiles{ofi},otherfiles{ofi},0,fixedimage,[outputbase, '0GenericAffine.mat'],interp);
     end
 end
 
-if ~writematout
-    delete([outputbase, '0GenericAffine.mat']);
-%    delete([outputbase, 'Inverse0GenericAffine.mat']); % will not be
-%    generated anymore if not writematout
+if ~writeoutmat
+    ea_delete([outputbase, '0GenericAffine.mat']);
+    ea_delete([outputbase, 'Inverse0GenericAffine.mat']);
     affinefile = {};
 else
     movefile([outputbase, '0GenericAffine.mat'], [volumedir, xfm, num2str(runs+1), '.mat']);
+
     invxfm = [fix, '2', mov, '_ants'];
     movefile([outputbase, 'Inverse0GenericAffine.mat'], [volumedir, invxfm, num2str(runs+1), '.mat']);
-    affinefile = {[volumedir, xfm, num2str(runs+1), '.mat'], ...
+    affinefile = {[volumedir, xfm, num2str(runs+1), '.mat']
                   [volumedir, invxfm, num2str(runs+1), '.mat']};
 end
 
@@ -249,7 +250,7 @@ fprintf('\nANTs LINEAR registration done.\n');
 %% add methods dump:
 cits={
     'Avants, B. B., Epstein, C. L., Grossman, M., & Gee, J. C. (2008). Symmetric diffeomorphic image registration with cross-correlation: evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis, 12(1), 26?41. http://doi.org/10.1016/j.media.2007.06.004'
-    };
+};
 
 ea_methods(volumedir,[mov,' was co-registered to ',fix,' using a two-stage linear registration (rigid followed by affine) as implemented in Advanced Normlization Tools (Avants 2008; http://stnava.github.io/ANTs/)'],...
     cits);

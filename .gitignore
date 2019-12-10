@@ -18,6 +18,8 @@ fibers/
 release/
 tmp/
 lead_standalone/
+connectomes/
+coverage_html/
 
 # dev only
 ea_make_release.m
@@ -42,3 +44,4 @@ Thumbs.db
 !ea_prefs_default.mat
 !ext_libs/support/libstdc++.so.6
 
+/slicer.py

@@ -325,9 +325,10 @@ movefile([directory,'import.nii'],opath);
 nii=nifti(opath);
 img=squeeze(nii.dat(round(size(nii.dat,1)/2),:,:));
 
-
 img=(img-min(img(:)))/(max(img(:))-min(img(:)));
 img=repmat(img,1,1,3);
+
+rmdir(directory, 's');
 
 
 function options=ea_step1options(handles)
@@ -350,7 +351,7 @@ options.cor_stdfactor=1.0; % Default: 1.0 - the higher this factor, the lower th
 %uipatdir=get(handles.patdir_choosebox,'String');
 
 options.earoot=[ea_getearoot];
-options.dicomimp=0;
+options.dicomimp.do = 0;
 
 options.normalize.do=1;
 options.normalize.method='ea_normalize_ants';
@@ -474,7 +475,7 @@ options.earoot=[ea_getearoot];
 % %uipatdir=get(handles.patdir_choosebox,'String');
 %
 % options.earoot=[ea_getearoot];
-% options.dicomimp=0;
+% options.dicomimp.do = 0;
 %
 % options.normalize.do=0;
 % options.normalize.method='SPM12 DARTEL nonlinear [MR/CT]';
@@ -495,7 +496,7 @@ options.sprungwert = 4;
 options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = false;
 options.normalize.method = 'ea_normalize_spmdartel';
 options.normalize.methodn = 2;
@@ -637,7 +638,7 @@ options.sprungwert = 4;
 options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = false;
 options.normalize.method = 'ea_normalize_ants';
 options.normalize.methodn = 6;
@@ -780,7 +781,7 @@ options.sprungwert = 4;
 options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = false;
 options.normalize.methodn = 6;
 options.normalize.check = false;
@@ -908,7 +909,7 @@ options.lc.func.compute_GM = 0;
 options.lc.func.prefs.TR = 2;
 options.lc.struc.compute_CM = 0;
 options.lc.struc.compute_GM = 0;
-options.lc.struc.ft.method = 'ea_ft_globaltracking_reisert';
+options.lc.struc.ft.method = 'ea_ft_gqi_yeh';
 options.lc.struc.ft.methodn = 2;
 options.lc.struc.ft.do = 0;
 options.lc.struc.ft.normalize = 1;
@@ -925,7 +926,7 @@ options.sprungwert = 4;
 options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = false;
 options.normalize.method = 'ea_normalize_ants';
 options.normalize.methodn = 6;
@@ -1055,7 +1056,7 @@ options.lc.func.compute_GM = 0;
 options.lc.func.prefs.TR = 2;
 options.lc.struc.compute_CM = 0;
 options.lc.struc.compute_GM = 0;
-options.lc.struc.ft.method = 'ea_ft_globaltracking_reisert';
+options.lc.struc.ft.method = 'ea_ft_gqi_yeh';
 options.lc.struc.ft.methodn = 2;
 options.lc.struc.ft.do = 0;
 options.lc.struc.ft.normalize = 1;
@@ -1072,7 +1073,7 @@ options.sprungwert = 4;
 options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = false;
 options.normalize.methodn = 6;
 options.normalize.check = false;
@@ -1201,7 +1202,7 @@ options.lc.func.compute_GM = 0;
 options.lc.func.prefs.TR = 2;
 options.lc.struc.compute_CM = 0;
 options.lc.struc.compute_GM = 0;
-options.lc.struc.ft.method = 'ea_ft_globaltracking_reisert';
+options.lc.struc.ft.method = 'ea_ft_gqi_yeh';
 options.lc.struc.ft.methodn = 2;
 options.lc.struc.ft.do = 0;
 options.lc.struc.ft.normalize = 1;
@@ -1223,7 +1224,7 @@ options.sprungwert = 4;
 options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = false;
 options.normalize.methodn = 6;
 options.normalize.check = false;

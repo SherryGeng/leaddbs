@@ -9,16 +9,16 @@ if ischar(from) % assume nifti file path
         interp=4;
     end
     options=ea_getptopts(directory);
-    ea_apply_normalization_tofile(options,{from},{to},directory,0,interp,from);
-    ea_flip_lr(to,to);
-    tof=ea_load_nii(to);
-   % ea_reslice_nii(to,to,abs(tof.voxsize),[],[],[],[],[],0);
-    
+        ea_flip_lr(from,to);
+
+    ea_apply_normalization_tofile(options,{to},{to},directory,0,interp,to);
+
 else % assume coordinate list
     spacedef=ea_getspacedef;
+    from(:,1)=-from(:,1);
+
     % To map the 'mm' coords in src to the 'vox' coords in src:
     [~, XYZ_vox] = ea_map_coords([from,ones(size(from,1),1)]', [ea_space,spacedef.templates{1},'.nii']);
     XYZ = ea_map_coords(XYZ_vox, [ea_space,spacedef.templates{1},'.nii'], [directory,'y_ea_inv_normparams.nii'], '');
-    XYZ(1,:)=-XYZ(1,:);
     XYZ=XYZ';
 end

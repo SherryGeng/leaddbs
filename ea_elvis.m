@@ -14,6 +14,11 @@ function resultfig=ea_elvis(varargin)
 
 % Initialize inputs
 options=varargin{1};
+
+if ~isfield(options, 'leadprod')
+    options.leadprod = '';
+end
+
 if nargin>2
     stimparams=varargin{3};
 else
@@ -25,12 +30,11 @@ else
 
     fiberthresh=options.fiberthresh;
 end
-
 % Initialize figure
 
 resultfig=figure('name', [options.patientname,': Electrode-Scene'],...
     'color', 'k', 'numbertitle', 'off',...
-    'CloseRequestFcn', @closesattelites, 'visible', options.d3.verbose,...
+    'CloseRequestFcn', @closesatellites, 'visible', options.d3.verbose,...
     'KeyPressFcn', @ea_keypress, 'KeyReleaseFcn', @ea_keyrelease);
 setappdata(resultfig,'options',options);
 set(resultfig,'toolbar','none');
@@ -38,9 +42,10 @@ ssz=get(0,'Screensize');
 ssz(1:2)=ssz(1:2)+50;
 ssz(3:4)=ssz(3:4)-200;
 set(resultfig, 'Position', ssz); % Maximize figure.
-
+options.d3.exportBB=0;
 % initialize some ui elements
 ht=uitoolbar(resultfig);
+setappdata(resultfig,'ht',ht);
 
 % add custom rotator:
 uibjs.rotate3dtog=uitoggletool(ht, 'CData', ea_get_icn('rotate'),...
@@ -90,7 +95,6 @@ axis fill
 
 % colormap('gray')
 
-
 %% Patient specific part (skipped if no patient is selected or no reco available):
 if ~strcmp(options.patientname,'No Patient Selected') % if not initialize empty viewer
     if exist([options.root,options.patientname,filesep,'ea_reconstruction.mat'],'file') || nargin>1
@@ -106,8 +110,8 @@ if ~strcmp(options.patientname,'No Patient Selected') % if not initialize empty 
 %             end
 
             if options.d3.mirrorsides
-               elstruct=ea_mirrorsides(elstruct);
-try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
+                elstruct=ea_mirrorsides(elstruct);
+                try options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
             end
 
         else
@@ -123,27 +127,67 @@ try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
             clear coords_mm trajectory
         end
 
+        elSide = cell(1, length(elstruct));
         for pt=1:length(elstruct)
             % show electrodes..
-            try
-                
-                [el_render(pt).el_render,el_label(:,pt)]=ea_showelectrode(resultfig,elstruct(pt),pt,options);
-            catch
-                ea_error(['Couldn''t visualize electrode from patient ',num2str(pt),'.']);
+            popts=options;
+            if strcmp(options.leadprod,'group')
+                try
+                    directory=[options.patient_list{elstruct(pt).pt},filesep];
+                    [popts.root,popts.patientname]=fileparts(directory);
+                    popts.root=[popts.root,filesep];
+                catch
+                    directory=[options.root,options.patientname,filesep];
+                end
+
+                popts=ea_detsides(popts);
+            else
+                directory=[options.root,options.patientname,filesep];
             end
+
+            elSide{pt}=popts.sides;
+
+            for side=elSide{pt}
+                try
+                    pobj=ea_load_trajectory(directory,side);
+                    pobj.hasPlanning=1;
+                    pobj.showPlanning=strcmp(options.leadprod,'or');
+                end
+                pobj.pt=pt;
+                pobj.options=popts;
+                pobj.elstruct=elstruct(pt);
+                pobj.showMacro=1;
+                pobj.side=side;
+
+                set(0,'CurrentFigure',resultfig);
+                if exist('el_render','var')
+                    el_render(end+1)=ea_trajectory(pobj);
+                else
+                    el_render(1)=ea_trajectory(pobj);
+                end
+
+                if ~exist('ellabel','var')
+                    ellabel=el_render(end).ellabel;
+                else
+                    try
+                        ellabel(end+1)=el_render(end).ellabel;
+                    end
+                end
+            end
+
             if options.d3.elrendering==1 && options.d3.exportBB % export vizstruct for lateron export to JSON file / Brainbrowser.
                % this part for brainbrowser support.
                vizstruct=struct('faces',[],'vertices',[],'colors',[]);
 
                cnt=1;
                 for side=1:length(options.sides)
-                    extract=1:length(el_render(pt).el_render{side});
+                    extract=1:length(el_render(side).elpatch);
                     for ex=extract
-                        tp=el_render(pt).el_render{side}(ex);
+                        tp=el_render(side).elpatch(ex);
 
                         try % works only in ML 2015
-                            tr=triangulation(get(el_render(pt).el_render{side}(ex),'Faces'),...
-                                get(el_render(pt).el_render{side}(ex),'Vertices'));
+                            tr=triangulation(get(el_render(side).elpatch(ex),'Faces'),...
+                                get(el_render(side).elpatch(ex),'Vertices'));
                             vizstruct(cnt).normals = vertexNormal(tr);
                         catch % workaround for older versions..
                             vizstruct(cnt).normals=get(tp,'VertexNormals')*-1;
@@ -151,7 +195,7 @@ try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
 
                         vizstruct(cnt).faces=get(tp,'Faces');
                         vizstruct(cnt).vertices=get(tp,'Vertices');
-                        scolor=get(el_render(pt).el_render{side}(ex),'FaceVertexCData');
+                        scolor=get(el_render(side).elpatch(ex),'FaceVertexCData');
                         vizstruct(cnt).colors=scolor;
                         %vizstruct(cnt).colors=repmat([squeeze(scolor(1,1,:))',0.7],length(vizstruct(cnt).faces),1);
                         vizstruct(cnt).name='';
@@ -160,15 +204,14 @@ try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
                 end
             end
 
-           % show microelectrode recording data
-           if exist('merstruct','var')
+            % show microelectrode recording data
+            if exist('merstruct','var')
                try
                    [mer(pt).render,merlabel(:,pt)]=ea_showmer(resultfig,merstruct(pt),pt,options);
                catch
                    ea_error(['Couldn''''t visualize electrode from patient ',num2str(pt),'.']);
                end
-           end
-
+            end
         end
 
         setappdata(resultfig,'elstruct',elstruct);
@@ -178,12 +221,31 @@ try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
         % pressed, all electrodes are made visible/invisible).
         drawnow
 
+        if strcmp(options.leadprod,'group')
+            elstructGroupID = [elstruct.group];
+            sideNum = cellfun(@numel, elSide);
+            elrenderGroupID = repelem(elstructGroupID, sideNum);
+            for g = unique(elstructGroupID)
+                el_renderID = elrenderGroupID == g;
+                eleGroupToggle = uitoggletool(ht, 'CData', ea_get_icn('electrode_group'),...
+                        'TooltipString', ['Electrode Group ', num2str(g)],...
+                        'Tag', ['Group: ', num2str(g)],...
+                        'OnCallback', {@eleGroupVisible,el_render(el_renderID)},...
+                        'OffCallback', {@eleGroupInvisible,el_render(el_renderID)}, 'State','on');
+            end
+
+            % Move the group toggle forward
+            isEleToggle = arrayfun(@(obj) ~isempty(regexp(obj.Tag, '^Group: ', 'once')), allchild(ht));
+            eleToggleInd = numel(unique(elstructGroupID))+1:find(~isEleToggle,1)-1;
+            ht.Children=ht.Children([eleToggleInd, 1:numel(unique(elstructGroupID)), find(~isEleToggle,1):end]);
+        end
+
         try
-            set(el_label,'Visible','off');
+            set(ellabel,'Visible','off');
             ellabeltog = uitoggletool(ht, 'CData', ea_get_icn('labels'),...
-                'TooltipString', 'Electrode labels',...
-                'OnCallback', {@objvisible,el_label},...
-                'OffCallback', {@objinvisible,el_label}, 'State','off');
+                'TooltipString', 'Electrode Labels',...
+                'OnCallback', {@objvisible,ellabel},...
+                'OffCallback', {@objinvisible,ellabel}, 'State','off');
         end
 
         cnt=1;
@@ -196,8 +258,8 @@ try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
                         caption{1}='Electrode_Left';
                         caption{2}='Electrode_Right';
                     end
-                    eltog(cnt)=uitoggletool(ht,'CData',ea_get_icn('electrode'),'TooltipString',caption{1},'OnCallback',{@elvisible,el_render,pt,2,'on',options},'OffCallback',{@elvisible,el_render,pt,2,'off',options},'State','on');
-                    eltog(cnt+1)=uitoggletool(ht,'CData',ea_get_icn('electrode'),'TooltipString',caption{2},'OnCallback',{@elvisible,el_render,pt,1,'on',options},'OffCallback',{@elvisible,el_render,pt,1,'off',options},'State','on');
+                    %eltog(cnt)=uitoggletool(ht,'CData',ea_get_icn('electrode'),'TooltipString',caption{1},'OnCallback',{@elvisible,el_render,pt,2,'on',options},'OffCallback',{@elvisible,el_render,pt,2,'off',options},'State','on');
+                    %eltog(cnt+1)=uitoggletool(ht,'CData',ea_get_icn('electrode'),'TooltipString',caption{2},'OnCallback',{@elvisible,el_render,pt,1,'on',options},'OffCallback',{@elvisible,el_render,pt,1,'off',options},'State','on');
                     if isfield(options,'uipatdirs')
                         if exist([options.uipatdirs{pt} '/cortex/CortElecs.mat'],'file')
                             vars = whos('-file',[options.uipatdirs{pt} '/cortex/CortElecs.mat']);
@@ -215,13 +277,13 @@ try               options.d3.isomatrix=ea_mirrorsides(options.d3.isomatrix); end
                 end
         end
 
-        setappdata(resultfig,'eltog',eltog);
-
         clear cnt
 
         % Initialize Stimulation-Button
         if ~strcmp(options.leadprod, 'group')
-            stimbutton=uipushtool(ht,'CData',ea_get_icn('stimulation'),...
+            eladdTraj = uipushtool(ht,'CData',ea_get_icn('addelectrode'),...
+                'TooltipString','Add Trajectory...','ClickedCallback',@ea_add_trajectory);
+            stimbutton = uipushtool(ht,'CData',ea_get_icn('stimulation'),...
                 'TooltipString','Stimulation Control Figure',...
                 'ClickedCallback',{@openstimviewer,elstruct,resultfig,options});
         end
@@ -241,12 +303,14 @@ slicebutton=uipushtool(ht,'CData',ea_get_icn('slices'),...
     'TooltipString','Slice Control Figure',...
     'ClickedCallback',{@opensliceviewer,resultfig,options});
 
-    % Initialize MER-Button
-    if ~strcmp(options.leadprod, 'group')
-        merbutton=uipushtool(ht,'CData',ea_get_icn('mer'),...
-            'TooltipString','MER Control Figure',...
-            'ClickedCallback',{@openmerviewer,resultfig,options});
-    end
+% Initialize MER-Button
+
+if ~strcmp(options.leadprod, 'group')
+    merbutton=uipushtool(ht,'CData',ea_get_icn('mer'),...
+        'TooltipString','MER Control Figure',...
+        'ClickedCallback',{@ea_openmerviewer,resultfig,options});
+end
+
 % Initialize Convis-Button
 convisbutton=uipushtool(ht,'CData',ea_get_icn('connectome'),...
     'TooltipString','Connectivity Visualization',...
@@ -266,13 +330,13 @@ corticalbutton=uipushtool(ht,'CData',ea_get_icn('cortex'),...
 if options.d3.writeatlases
     atlases = ea_showatlas(resultfig,elstruct,options);
 
-    if ~strcmp(options.d3.verbose,'off')
+    if ~strcmp(options.d3.verbose,'off') && ~atlases.discfibersonly
         ea_openatlascontrol([],[],atlases,resultfig,options);
     end
 
     if options.d3.elrendering==1 && options.d3.exportBB % export vizstruct for lateron export to JSON file / Brainbrowser.
         try % see if electrode has been defined.
-        cnt=length(vizstruct);
+            cnt=length(vizstruct);
         catch
             cnt=0;
         end
@@ -280,7 +344,6 @@ if options.d3.writeatlases
         try
             for side=1:length(options.sides)
                 for atl=1:length(atlases.fv)
-
                     if isfield(atlases.fv{atl,side},'faces')
                         vizstruct(cnt+1).faces=atlases.fv{atl,side}.faces;
                         vizstruct(cnt+1).vertices=atlases.fv{atl,side}.vertices;
@@ -294,6 +357,8 @@ if options.d3.writeatlases
             end
         end
     end
+else
+    colormap(gray)
 end
 
 % Show isomatrix data
@@ -309,38 +374,39 @@ end
 
 if isfield(options.d3,'expdf')
     if options.d3.expdf
-        %cd([options.root,options.patientname]);
         fig2pdf3d(gca,[options.root,options.patientname,filesep,'Lead-DBS_Electrode_Localization'],options);
         close(resultfig);
         return
     end
 end
-%% End of patient-specific part.
+%% End of patient's part.
 
 % Initialize a draggable lightbulb
+set(0,'CurrentFigure',resultfig);
 hold on
 ea_show_light(resultfig,1);
 % set(lightbulb, 'Visible', 'off');
 
 lightbulbbutton=uitoggletool(ht,'CData',ea_get_icn('lightbulb'),...
-    'TooltipString','Lightbulb',...
+    'TooltipString','Camera Lightbulb',...
     'OnCallback',{@objvisible,getappdata(resultfig,'cam_lamp')},...
     'OffCallback',{@objinvisible,getappdata(resultfig,'cam_lamp')},'State','on');
 clightbulbbutton=uitoggletool(ht,'CData',ea_get_icn('clightbulb'),...
-    'TooltipString','Lightbulb',...
+    'TooltipString','Ceiling Lightbulb',...
     'OnCallback',{@objvisible,getappdata(resultfig,'ceiling_lamp')},...
     'OffCallback',{@objinvisible,getappdata(resultfig,'ceiling_lamp')},'State','on');
 llightbulbbutton=uitoggletool(ht,'CData',ea_get_icn('llightbulb'),...
-    'TooltipString','Lightbulb',...
+    'TooltipString','Left Lightbulb',...
     'OnCallback',{@objvisible,getappdata(resultfig,'left_lamp')},...
     'OffCallback',{@objinvisible,getappdata(resultfig,'left_lamp')},'State','on');
 rlightbulbbutton=uitoggletool(ht,'CData',ea_get_icn('rlightbulb'),...
-    'TooltipString','Lightbulb',...
+    'TooltipString','Right Lightbulb',...
     'OnCallback',{@objvisible,getappdata(resultfig,'right_lamp')},...
     'OffCallback',{@objinvisible,getappdata(resultfig,'right_lamp')},'State','on');
 
-
 % Initialize HD-Export button
+dumpscreenshotbutton=uipushtool(ht,'CData',ea_get_icn('dump'),...
+    'TooltipString','Dump Screenshot','ClickedCallback',{@dump_screenshot,resultfig,options});
 
 hdsavebutton=uipushtool(ht,'CData',ea_get_icn('save'),...
     'TooltipString','Save Scene','ClickedCallback',@export_hd);
@@ -348,12 +414,9 @@ dofsavebutton=uipushtool(ht,'CData',ea_get_icn('save_depth'),...
     'TooltipString','Save Scene with depth of field',...
     'ClickedCallback',{@ea_export_depth_of_field,resultfig});
 
-
 % Initialize Video-Export button
-
 videoexportbutton=uipushtool(ht,'CData',ea_get_icn('video'),...
     'TooltipString','Save video','ClickedCallback',{@export_video,options});
-
 
 % Init hard_electrode_view button
 if isfield(options,'modality') && options.modality==2
@@ -368,6 +431,14 @@ end
 %     'TooltipString','Export to Server',...
 %     'ClickedCallback',{@ea_export_server,options});
 
+% add default view buttons
+uipushtool(ht, 'CData',ea_get_icn('defaultviewsave'),...
+    'TooltipString', 'Save current view as default',...
+    'ClickedCallback',@save_currentview_callback);
+uipushtool(ht, 'CData',ea_get_icn('defaultviewset'),...
+    'TooltipString', 'Display default view',...
+    'ClickedCallback',@set_defaultview_callback);
+
 hold off
 
 set(0,'CurrentFigure',resultfig);
@@ -380,7 +451,7 @@ axis vis3d
 axis equal
 set(resultfig,'Name',figtitle);
 set(0,'CurrentFigure',resultfig);
-view(142,13.6)
+
 try
     set(gca,'cameraviewanglemode','manual');
 end
@@ -390,6 +461,17 @@ set(gca,'clipping','off');
 if ~strcmp(options.d3.verbose,'off')
     opensliceviewer([],[],resultfig,options);
 end
+
+try
+    prefs = ea_prefs;
+    v = prefs.machine.view;
+    togglestates = prefs.machine.togglestates;
+    %ea_defaultview_transition(v,togglestates);
+    ea_defaultview(v,togglestates);
+catch
+    view(142,13.6)
+end
+
 if options.d3.elrendering==1 && options.d3.exportBB % export vizstruct for lateron export to JSON file / Brainbrowser.
     try
         % store json in figure file
@@ -400,9 +482,10 @@ if options.d3.elrendering==1 && options.d3.exportBB % export vizstruct for later
         ea_export_server([],[],options);
     end
 end
+
 setappdata(resultfig, 'options', options);
 setappdata(resultfig,'elstruct',elstruct);
-
+ea_figmenu(resultfig,'add');
 
 
 function opensliceviewer(hobj,ev,resultfig,options)
@@ -410,6 +493,7 @@ awin=ea_anatomycontrol(resultfig,options);
 
 set(awin,'visible',options.d3.verbose);
 setappdata(resultfig,'awin',awin);
+
 
 function openconnectomeviewer(hobj,ev,resultfig,options)
 conwin=ea_convis(gcf,options);
@@ -421,10 +505,6 @@ stimwin=ea_stimparams(elstruct,gcf,options);
 setappdata(resultfig,'stimwin',stimwin);
 %try WinOnTop(stimwin,true); end
 
-function openmerviewer(hobj,ev,resultfig,options)
-mercontrolfig = ea_mercontrol(resultfig, options);
-setappdata(resultfig, 'mercontrolfig', mercontrolfig);
-try WinOnTop(mercontrolfig, true); end
 
 function opencortexviewer(hobj,ev,resultfig,options)
 cortex=ea_showcortex(resultfig,options);
@@ -435,47 +515,72 @@ setappdata(resultfig,'awin',awin);
 try WinOnTop(awin,true); end
 
 
-
-function closesattelites(src,evnt)
-stimwin=getappdata(gcf,'stimwin');
-try
-    close(stimwin)
-end
-awin=getappdata(gcf,'awin');
-try
-    close(awin)
-end
-aswin=getappdata(gcf,'aswin');
-try
-    close(aswin)
-end
-conwin=getappdata(gcf,'conwin');
-try
-    close(conwin)
-end
-mercontrolfig = getappdata(gcf, 'mercontrolfig');
-try
-    close(mercontrolfig)
-end
+function closesatellites(src,evnt)
+% Close all valid satellite windows
+structfun(@(f) isa(f, 'matlab.ui.Figure') && isvalid(f) && close(f), getappdata(gcf));
 delete(gcf)
 
 
-function export_video(hobj,ev,options)
+% default view buttons callback
+function save_currentview_callback(source,eventdata)
+% call ea_defaultview so current view is saved
+ea_defaultview()
 
-%% Set up recording parameters (optional), and record
+
+function set_defaultview_callback(source,eventdata)
+% get stored default view preferences and call ea_defaultview
+prefs = ea_prefs;
+v = prefs.machine.view;
+togglestates = prefs.machine.togglestates;
+%ea_defaultview_transition(v,togglestates);
+ea_defaultview(v,togglestates);
+
+
+function export_video(hobj,ev,options)
+% Set up recording parameters (optional), and record
 [FileName,PathName] = uiputfile('LEAD_Scene.mp4','Save file name for video');
 ea_CaptureFigVid(options.prefs.video.path, [PathName,FileName],options.prefs.video.opts);
 
 
-
 function export_hd(hobj,ev)
+set(gca, 'Color', 'none');
+set(gcf,'color','none');
 
 [FileName,PathName] = uiputfile('LEAD_Scene.png','Save file name');
 if FileName
-set(gcf, 'Color', [1,1,1]);
-[~, cdata] = ea_myaa([4, 2]);
+    % set(gcf, 'Color', [1,1,1]);
+    % [~, cdata] = ea_myaa([4, 2]);
+    %
+    % imwrite(cdata, [PathName,FileName], 'png');
+    ea_screenshot([PathName,FileName],'myaa');
+end
 
-imwrite(cdata, [PathName,FileName], 'png');
+
+function dump_screenshot(hobj,ev,resultfig,options)
+
+set(0,'CurrentFigure',resultfig);
+if ~exist([options.root,options.patientname,filesep,'export',filesep,'views'],'dir')
+    mkdir([options.root,options.patientname,filesep,'export',filesep,'views']);
+end
+
+views=dir([options.root,options.patientname,filesep,'export',filesep,'views',filesep,'view_u*.png']);
+next=1;
+while ismember(['view_u',sprintf('%03.0f',next),'.png'],{views.name})
+    next=next+1;
+end
+
+ea_screenshot([options.root,options.patientname,filesep,'export',filesep,'views',filesep,'view_u',sprintf('%03.0f',next),'.png'],'ld');
+
+
+function eleGroupVisible(hobj,ev,eleGroup)
+for i=1:numel(eleGroup)
+    eleGroup(i).toggleH.State='on';
+end
+
+
+function eleGroupInvisible(hobj,ev,eleGroup)
+for i=1:numel(eleGroup)
+    eleGroup(i).toggleH.State='off';
 end
 
 
@@ -483,27 +588,9 @@ function objvisible(hobj,ev,atls)
 set(atls, 'Visible', 'on');
 
 
-
 function objinvisible(hobj,ev,atls)
 set(atls, 'Visible', 'off');
 
-
-function elvisible(hobj,ev,atls,pt,side,onoff,options)
-
-if(getappdata(hobj.Parent.Parent,'altpressed'))
-
-    eltog=getappdata(hobj.Parent.Parent,'eltog');
-    set(eltog,'State',onoff);
-    for el=1:length(atls)
-        for side=1:length(options.sides)
-           try
-               set(atls(el).el_render{side}, 'Visible', onoff);
-           end
-        end
-    end
-else
-set(atls(pt).el_render{side}, 'Visible', onoff);
-end
 
 function ctxelvisible(hobj,ev,atls,pt,side,onoff,options)
 
@@ -519,7 +606,7 @@ if(getappdata(gcf,'altpressed'))
         end
     end
 else
-set(atls(pt).el_render{side}, 'Visible', onoff);
+    set(atls(pt).el_render{side}, 'Visible', onoff);
 end
 
 
@@ -907,16 +994,3 @@ elseif find('123456789' == evnt.Character)
     set(gcf,'userdata',self);
     myaa('update');
 end
-
-
-
-
-
-
-
-
-
-
-
-
-

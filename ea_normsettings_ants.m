@@ -22,7 +22,7 @@ function varargout = ea_normsettings_ants(varargin)
 
 % Edit the above text to modify the response to help ea_normsettings_ants
 
-% Last Modified by GUIDE v2.5 13-Jul-2017 21:37:38
+% Last Modified by GUIDE v2.5 29-Dec-2018 11:48:39
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -65,31 +65,41 @@ set(handles.titletext,'String','ANTs Defaults');
 earoot=ea_getearoot;
 presf=[earoot,'ext_libs',filesep,'ANTs',filesep,'presets',filesep];
 ndir=dir([presf,'ea_antspreset_*.m']);
+namecell = cell(size(ndir));
+funcell = cell(size(ndir));
 for n=1:length(ndir)
-    [~,funame]=fileparts(ndir(n).name);
+    [~,funame,~]=fileparts(ndir(n).name);
     namecell{n}=eval([funame,'(''query'')']);
-    funcell{n}=ndir(n).name;
+    funcell{n}=funame;
 end
+[namecell, sortix]=sort(namecell);
+funcell = funcell(sortix);
 setappdata(handles.pcpopup,'funcell',funcell);
 set(handles.pcpopup,'String',namecell);
 
 % select last selection
 prefs=ea_prefs('');
+
+% preset
 [~,ix]=ismember(prefs.machine.normsettings.ants_preset,getappdata(handles.pcpopup,'funcell'));
 if ix % if has prior selection
     set(handles.pcpopup,'Value',ix);
 end
 
+% metric
 [~,ix]=ismember(prefs.machine.normsettings.ants_metric,get(handles.metric,'String'));
 if ix % if has prior selection
     set(handles.metric,'Value',ix);
 end
 
+% strategy
 [~,ix]=ismember(prefs.machine.normsettings.ants_strategy,get(handles.strategy,'String'));
 if ix % if has prior selection
     set(handles.strategy,'Value',ix);
 end
 
+set(handles.includefa,'Value',prefs.machine.normsettings.ants_usefa);
+set(handles.reinforcetargets,'Value',prefs.machine.normsettings.ants_reinforcetargets);
 
 if ischar(prefs.machine.normsettings.ants_numcores)
     set(handles.restrcores,'Value',1);
@@ -101,6 +111,11 @@ end
 
 set(handles.scrf,'Value',prefs.machine.normsettings.ants_scrf);
 set(handles.stagesep,'Value',prefs.machine.normsettings.ants_stagesep);
+
+set(handles.skullstripped,'Value',prefs.machine.normsettings.ants_skullstripped);
+
+set(handles.usepreexisting,'Value',prefs.machine.normsettings.ants_usepreexisting);
+
 
 % UIWAIT makes ea_normsettings_ants wait for user response (see UIRESUME)
 
@@ -161,6 +176,14 @@ normsettings.ants_metric=normsettings.ants_metric{get(handles.metric,'Value')};
 normsettings.ants_strategy=get(handles.strategy,'String');
 normsettings.ants_strategy=normsettings.ants_strategy{get(handles.strategy,'Value')};
 
+normsettings.ants_usefa=get(handles.includefa,'Value');
+
+normsettings.ants_skullstripped=get(handles.skullstripped,'Value');
+
+normsettings.ants_reinforcetargets=get(handles.reinforcetargets,'Value');
+
+normsettings.ants_usepreexisting=get(handles.usepreexisting,'Value');
+
 
 if get(handles.restrcores,'Value')
     normsettings.ants_numcores=get(handles.numcores,'String');
@@ -180,7 +203,7 @@ function scrf_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of scrf
-
+set(handles.reinforcetargets,'enable',ea_bool2onoff(get(hObject,'Value')));
 
 % --- Executes on selection change in metric.
 function metric_Callback(hObject, eventdata, handles)
@@ -272,3 +295,53 @@ function stagesep_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of stagesep
+
+
+% --- Executes on button press in includefa.
+function includefa_Callback(hObject, eventdata, handles)
+% hObject    handle to includefa (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of includefa
+
+
+% --- Executes on button press in skullstripped.
+function skullstripped_Callback(hObject, eventdata, handles)
+% hObject    handle to skullstripped (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of skullstripped
+
+
+% --- Executes on button press in reinforcetargets.
+function reinforcetargets_Callback(hObject, eventdata, handles)
+% hObject    handle to reinforcetargets (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of reinforcetargets
+
+
+% --- Executes on selection change in usepreexisting.
+function usepreexisting_Callback(hObject, eventdata, handles)
+% hObject    handle to usepreexisting (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns usepreexisting contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from usepreexisting
+
+
+% --- Executes during object creation, after setting all properties.
+function usepreexisting_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to usepreexisting (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

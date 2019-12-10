@@ -5,13 +5,14 @@ directory=[options.root,options.patientname,filesep];
 if ~exist([directory,options.prefs.fa2anat],'file')
     if ~exist([directory,options.prefs.fa],'file')
         if ~exist([directory,options.prefs.dti],'file')
-            disp('No dMRI data has been found. Proceeding without FA');
+            fprintf('\n\nNo dMRI data has been found. Proceeding without FA\n\n');
         else
             ea_isolate_fa(options);
         end
     end
     if exist([directory,options.prefs.fa],'file') % check again since could have been built above
         if exist([directory,options.prefs.fa],'file') % recheck if has been built.
+            ea_backuprestore([directory,options.prefs.fa]);
             ea_coreg2images(options,[directory,options.prefs.fa],[directory,options.prefs.prenii_unnormalized],[directory,options.prefs.fa2anat]);
         end
     end

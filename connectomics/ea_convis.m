@@ -22,7 +22,7 @@ function varargout = ea_convis(varargin)
 
 % Edit the above text to modify the response to help ea_convis
 
-% Last Modified by GUIDE v2.5 30-Sep-2016 17:26:59
+% Last Modified by GUIDE v2.5 01-Mar-2018 11:37:26
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -69,8 +69,23 @@ setappdata(handles.convis,'resultfig',resultfig);
 setappdata(handles.convis,'options',options);
 setappdata(resultfig,'convis',handles.convis);
 
-
 refreshcv(handles);
+
+% Initialize the coordinate boxes.
+pV=getappdata(handles.convis,'pV');
+pX=getappdata(handles.convis,'pX');
+[xmm,ymm,zmm]=getcoordinates(pV,pX,get(handles.matseed,'Value'));
+set(handles.xmm,'String',num2str(xmm,'%.2f'));
+set(handles.ymm,'String',num2str(ymm,'%.2f'));
+set(handles.zmm,'String',num2str(zmm,'%.2f'));
+set(handles.matseed,'ForegroundColor',[0,0,0]);
+
+% dev
+if options.prefs.env.dev
+    set(handles.savefibers,'Visible','on')
+else
+    set(handles.savefibers,'Visible','off')
+end
 
 
 function refreshcv(varargin)
@@ -83,7 +98,6 @@ end
 if nargin>2
     apply=varargin{3};
 end
-
 
 options=getappdata(handles.convis,'options');
 
@@ -113,13 +127,17 @@ vomc=get(handles.voxmodality,'String');
 if isempty(mmc)
    cv_disabletime(handles);
 else
-if isempty(strfind(mmc{get(handles.matmodality,'Value')},'_tc')) && ...
-        isempty(strfind(vmc{get(handles.vatmodality,'Value')},'_tc')) && ...
-        isempty(strfind(vomc{get(handles.voxmodality,'Value')},'_tc')) % no timeseries selected.
-    cv_disabletime(handles);
-else
-    cv_enabletime(handles);
-end
+    mmc = mmc{get(handles.matmodality,'Value')};
+    vmc = vmc{get(handles.vatmodality,'Value')};
+    vomc = vomc{get(handles.voxmodality,'Value')};
+    if isempty(regexp(mmc, '^Patient''s fMRI - ', 'once')) && ...
+       isempty(regexp(vmc, '^Patient''s fMRI - ', 'once')) && ...
+       isempty(regexp(vomc, '_fMRI$', 'once')) % no timeseries selected.
+
+       cv_disabletime(handles);
+    else
+       cv_enabletime(handles);
+    end
 end
 if apply % update elvis
     %% retrieve and delete prior results
@@ -129,23 +147,24 @@ if apply % update elvis
     ea_deleteML(resultfig,handles,options);
     if ~hold
         [xmm,ymm,zmm]=getcoordinates(pV,pX,get(handles.matseed,'Value'));
-        set(handles.xmm,'String',num2str(xmm)); set(handles.ymm,'String',num2str(ymm)); set(handles.zmm,'String',num2str(zmm));
+        set(handles.xmm,'String',num2str(xmm,'%.2f'));
+        set(handles.ymm,'String',num2str(ymm,'%.2f'));
+        set(handles.zmm,'String',num2str(zmm,'%.2f'));
         set(handles.matseed,'ForegroundColor',[0,0,0]);
     end
 
     %% now show results
-    if get(handles.vizvat,'Value'); % show voxel-level results
+    if get(handles.vizvat,'Value') % show voxel-level results
         ea_cvshowvatresults(resultfig,pX,directory,filesare,handles,pV,selectedparc,options);
     else
         ea_deletePL(resultfig,'PL','vat');
     end
 
-    if get(handles.vizgraph,'Value'); % show voxel-level results
+    if get(handles.vizgraph,'Value') % show voxel-level results
         ea_cvshowvoxresults(resultfig,directory,filesare,handles,pV,selectedparc,options);
     end
 
-    if get(handles.vizmat,'Value'); % show seed-based-connectivity results
-
+    if get(handles.vizmat,'Value') % show seed-based-connectivity results
         ea_cvshowseedbasedresults(resultfig,directory,pV,pX,selectedparc,handles,options);
     else
         ea_deletePL(resultfig,'PL','mat');
@@ -163,17 +182,19 @@ if apply % update elvis
 end
 set(convis,'name','Connectome Results');
 
-function     ea_deleteML(resultfig,handles,options)
+
+function ea_deleteML(resultfig,handles,options)
 
 ML=getappdata(resultfig,'ML');
 if isempty(ML)
     return
 end
-try    delete(ML.pedges); end
+try delete(ML.pedges); end
 try delete(ML.pnodes); end
 try delete(ML.hn); end
 try delete(ML.nnodes); end
 % delete matrix level stuff here.
+
 
 function ea_cvshowmatresults(resultfig,directory,selectedparc,handles,options)
 
@@ -183,7 +204,6 @@ setappdata(resultfig,'ML',ML);
 
 
 function ea_initmatlevel(handles,directory,pdirectory,selectedparc,options)
-
 
 pmdirs=dir([pdirectory,'*_CM.mat']);
 cnt=1;
@@ -208,20 +228,18 @@ end
 mods=get(handles.wmatmodality,'String');
 if ~strcmp('Choose...',mods{get(handles.wmatmodality,'Value')});
     set(handles.chosenwmatstr,'String','');
+    set(handles.chosenwmatstr,'TooltipString','');
 end
 
 
-
-
-
-
 function ea_cvshowvoxresults(resultfig,directory,filesare,handles,pV,selectedparc,options)
+
 mo_ds=get(handles.voxmodality,'String');
 mo_d=mo_ds{get(handles.voxmodality,'Value')};
 gV=spm_vol([directory,'connectomics',filesep,selectedparc,filesep,'graph',filesep,filesare{get(handles.voxmetric,'Value')},mo_d,'.nii']);
 gX=spm_read_vols(gV);
 thresh=get(handles.voxthresh,'String');
-if strcmp(thresh,'auto');
+if strcmp(thresh,'auto')
     thresh=nanmean(gX(:))+1*nanstd(gX(:));
 else
     thresh=str2double(thresh);
@@ -231,22 +249,22 @@ graphsurf=ea_showconnectivitypatch(resultfig,gV,gX,thresh,[],[],[],1,0);
 
 setappdata(resultfig,'graphsurf',graphsurf);
 
+
 function ea_cvshowseedbasedresults(resultfig,directory,pV,pX,selectedparc,handles,options)
 %mV=pV; % duplicate labeling handle
 %mX=pX; % duplicate labeling data
 
-
 % determine if CM/TC or fiberset is selected
 matmodality=get(handles.matmodality,'String');
 matmodality=matmodality{get(handles.matmodality,'Value')};
-if ~isempty(strfind(matmodality,'_CM')) || ~isempty(strfind(matmodality,'_tc'))
+if regexp(matmodality, '^Patient''s fMRI - ')
     ea_deletePL(resultfig,'PL','mat');
     ea_cvshowmatresultsCMTC(resultfig,directory,pV,pX,handles,options);
 else % use fiberset
 
     % fibers filename
     switch matmodality
-        case 'Patient-specific fiber tracts'
+        case 'Patient''s fiber tracts'
             fibersfile=[directory,'connectomes',filesep,'dMRI',filesep,options.prefs.FTR_normalized];
         otherwise
             fibersfile=[ea_getconnectomebase('dmri'),matmodality,filesep,'data.mat'];
@@ -273,23 +291,23 @@ else % use fiberset
 
         [~,thresh]=ea_cvshowfiberconnectivities(resultfig,fibersfile,seed,targetsfile,thresh,1,options,'',changedstates,'mat',get(handles.vizmat_regs,'Value'),get(handles.vizmat_labs,'Value'));
         set(handles.matthreshis,'String',num2str(thresh));
-
     end
-
-
 end
 
 
 function ea_cvshowmatresultsCMTC(resultfig,directory,pV,pX,handles,options)
 
-pX=round(pX);
-mms=get(handles.matmodality,'String');
-parcs=get(handles.labelpopup,'String');
-CM=load([directory,'connectomics',filesep,parcs{get(handles.labelpopup,'Value')},filesep,mms{get(handles.matmodality,'Value')}]);
+pX = round(pX);
+mods = get(handles.matmodality,'String');
+mod = mods{get(handles.matmodality,'Value')};
+rest_CM = [strrep(mod, 'Patient''s fMRI - ', ''), '_fMRI_CM'];
+parcs = get(handles.labelpopup,'String');
+parc = parcs{get(handles.labelpopup,'Value')};
+CM=load([directory,'connectomics',filesep,parc,filesep,rest_CM]);
 fn=fieldnames(CM);
 CM=eval(['CM.',fn{1},';']);
 
-if ~isempty(strfind(mms{get(handles.matmodality,'Value')},'_tc'))
+if get(handles.timecircle, 'Value')
     % timecourses selected: need to create a CM first. In this case, the variable CM is
     % not a connectivity matrix but time-courses!
 
@@ -301,7 +319,8 @@ if ~isempty(strfind(mms{get(handles.matmodality,'Value')},'_tc'))
         % use whole CM
         CM=corrcoef(CM);
     else
-        tiframe=str2double(tiframe);         tiwindow=str2double(tiwindow);
+        tiframe=str2double(tiframe);
+        tiwindow=str2double(tiwindow);
         % check if selected time window is possible:
         if (tiframe+tiwindow)>timedim || tiframe<1 % end is reached
             set(handles.timeframe,'String','1'); tiframe=1; % reset timeframe to 1
@@ -321,10 +340,11 @@ if ~isempty(strfind(mms{get(handles.matmodality,'Value')},'_tc'))
         end
     end
 end
+
 currentseed=get(handles.matseed,'Value');
 seedcon=CM(currentseed,:);
 thresh=get(handles.matthresh,'String');
-if strcmp(thresh,'auto');
+if strcmp(thresh,'auto')
     thresh=nanmean(seedcon)+1*nanstd(seedcon);
 else
     thresh=str2double(thresh);
@@ -346,12 +366,10 @@ setappdata(resultfig,'matsurf',matsurf);
 setappdata(resultfig,'seedsurf',seedsurf);
 
 
-
 function [directory,pdirectory,selectedparc]=ea_cvinitgui(handles,options)
 %% init/modify UI controls:
 
 % parcellation popup:
-
 pdirs=dir([ea_space(options,'labeling'),'*.nii']);
 cnt=1;
 
@@ -361,7 +379,7 @@ for pdir=1:length(pdirs)
 end
 
 set(handles.labelpopup,'String',parcs);
-if get(handles.labelpopup,'Value')>length(get(handles.labelpopup,'String'));
+if get(handles.labelpopup,'Value')>length(get(handles.labelpopup,'String'))
     set(handles.labelpopup,'Value',length(get(handles.labelpopup,'String')));
 end
 
@@ -384,9 +402,7 @@ for pdir=1:length(pdirs)
 end
 
 if ~ismember({selectedparc},parcs)
-
     cv_enablevats(handles);
-    %
 end
 
 
@@ -398,7 +414,7 @@ modlist=ea_genmodlist(directory,selectedparc,options);
 % cnt=1;
 % % check if pat-specific fibertracts are present:
 % if exist([directory,'connectomes',filesep,'dMRI',filesep,options.prefs.FTR_normalized],'file');
-%     modlist{cnt}='Patient-specific fiber tracts';
+%     modlist{cnt}='Patient''s fiber tracts';
 %     cnt=cnt+1;
 % end
 %
@@ -431,11 +447,9 @@ else
     cv_enablemats(handles);
 end
 
-
-
 set(handles.matmodality,'String',modlist);
 
-if get(handles.matmodality,'Value')>length(get(handles.matmodality,'String'));
+if get(handles.matmodality,'Value')>length(get(handles.matmodality,'String'))
     set(handles.matmodality,'Value',length(get(handles.matmodality,'String')));
 end
 
@@ -460,6 +474,7 @@ if get(handles.matseed,'Value')>length(get(handles.matseed,'String'));
     set(handles.matseed,'Value',length(get(handles.matseed,'String')));
 end
 
+
 function [filesare,labelsare,mods]=ea_initvoxellevel(handles,pdirectory)
 
 %% init voxel level controls:
@@ -480,7 +495,7 @@ if exist([pdirectory,'graph'],'file')
 
     if ~isempty(labelsare)
         set(handles.voxmetric,'String',labelsare);
-        if get(handles.voxmetric,'Value')>length(get(handles.voxmetric,'String'));
+        if get(handles.voxmetric,'Value')>length(get(handles.voxmetric,'String'))
             set(handles.voxmetric,'Value',length(get(handles.voxmetric,'String')));
         end
         cv_enablevoxs(handles);
@@ -505,15 +520,15 @@ if exist('filesare','var')
         cnt=cnt+1;
     end
     set(handles.voxmodality,'String',mods);
-    if get(handles.voxmodality,'Value')>length(get(handles.voxmodality,'String'));
+    if get(handles.voxmodality,'Value')>length(get(handles.voxmodality,'String'))
         set(handles.voxmodality,'Value',length(get(handles.voxmodality,'String')));
     end
 end
 
+
 function ea_initvatlevel(handles,directory,selectedparc,options)
 
-modlist=ea_genmodlist(directory,selectedparc,options,'vat');
-
+modlist=ea_genmodlist(directory,selectedparc,options);
 
 %% VATs:
 vdirs=dir([directory,'stimulations']);
@@ -537,7 +552,7 @@ end
 if get(handles.vatmodality,'Value')>length(modlist) % probably user has changed parcellation..
     set(handles.vatmodality,'Value',1);
 end
-if get(handles.vatseed,'Value')>length(get(handles.vatseed,'String'));
+if get(handles.vatseed,'Value')>length(get(handles.vatseed,'String'))
     set(handles.vatseed,'Value',1);
 end
 
@@ -569,6 +584,7 @@ else
         set(handles.lvatcheck,'Value', 0);
     end
 end
+
 
 function oo=ea_getonofftruefalse(tf)
 oo='off';
@@ -626,7 +642,6 @@ function cv_enablevats(handles)
 % set(handles.timeframe,'Enable','off');
 % set(handles.timecircle,'Enable','off');
 
-
 set(handles.vatmodality,'Enable','on');
 set(handles.vatseed,'Enable','on');
 set(handles.vatthresh,'Enable','on');
@@ -642,11 +657,13 @@ set(handles.voxmodality,'Enable','off');
 set(handles.voxmetric,'Enable','off');
 set(handles.voxthresh,'Enable','off');
 
+
 function cv_enablevoxs(handles)
 set(handles.vizgraph,'Enable','on');
 set(handles.voxmodality,'Enable','on');
 set(handles.voxmetric,'Enable','on');
 set(handles.voxthresh,'Enable','on');
+
 
 function cv_disablemats(handles)
 set(handles.matmodality,'Enable','off');
@@ -659,12 +676,14 @@ set(handles.timewindow,'Enable','off');
 set(handles.timeframe,'Enable','off');
 set(handles.timecircle,'Enable','off');
 
+
 function cv_disablewmats(handles)
 set(handles.vizwmat,'Enable','off');
 set(handles.wmatmodality,'Enable','off');
 set(handles.wmatnodes,'Enable','off');
 set(handles.wmatedges,'Enable','off');
 set(handles.wmatthresh,'Enable','off');
+
 
 function cv_enablewmats(handles)
 set(handles.vizwmat,'Enable','on');
@@ -673,8 +692,8 @@ set(handles.wmatnodes,'Enable','on');
 set(handles.wmatedges,'Enable','on');
 set(handles.wmatthresh,'Enable','on');
 
-function cv_enablemats(handles)
 
+function cv_enablemats(handles)
 set(handles.labelpopup,'Enable','on');
 set(handles.matmodality,'Enable','on');
 set(handles.matseed,'Enable','on');
@@ -686,17 +705,20 @@ set(handles.timewindow,'Enable','on');
 set(handles.timeframe,'Enable','on');
 set(handles.timecircle,'Enable','on');
 
+
 function cv_disabletime(handles)
 %set(handles.matthresh,'Enable','off');
 set(handles.timewindow,'Enable','off');
 set(handles.timeframe,'Enable','off');
 set(handles.timecircle,'Enable','off');
 
+
 function cv_enabletime(handles)
 %set(handles.matthresh,'Enable','on');
 set(handles.timewindow,'Enable','on');
 set(handles.timeframe,'Enable','on');
 set(handles.timecircle,'Enable','on');
+
 
 function cv_disablevats(handles)
 set(handles.vizvat,'Enable','off');
@@ -705,11 +727,6 @@ set(handles.vatseed,'Enable','off');
 set(handles.lvatcheck,'Enable','off');
 set(handles.rvatcheck,'Enable','off');
 set(handles.vatthresh,'Enable','off');
-
-
-
-
-
 
 
 % --- Outputs from this function are returned to the command line.
@@ -793,7 +810,9 @@ function matseed_Callback(hObject, eventdata, handles)
 pV=getappdata(handles.convis,'pV');
 pX=getappdata(handles.convis,'pX');
 [xmm,ymm,zmm]=getcoordinates(pV,pX,get(handles.matseed,'Value'));
-set(handles.xmm,'String',num2str(xmm)); set(handles.ymm,'String',num2str(ymm)); set(handles.zmm,'String',num2str(zmm));
+set(handles.xmm,'String',num2str(xmm,'%.2f'));
+set(handles.ymm,'String',num2str(ymm,'%.2f'));
+set(handles.zmm,'String',num2str(zmm,'%.2f'));
 set(handles.matseed,'ForegroundColor',[0,0,0]);
 refreshcv(handles);
 
@@ -806,7 +825,10 @@ end
 XYZ=[xx,yy,zz];
 centrvx=[mean(XYZ,1),1];
 centrmm=pV.mat*centrvx';
-xmm=centrmm(1); ymm=centrmm(2); zmm=centrmm(3);
+xmm=centrmm(1);
+ymm=centrmm(2);
+zmm=centrmm(3);
+
 
 function [ix,err]=setcoordinates(handles)
 % set seed selection based on manual coordinate entry.
@@ -816,7 +838,6 @@ xmm=str2double(get(handles.xmm,'String'));
 ymm=str2double(get(handles.ymm,'String'));
 zmm=str2double(get(handles.zmm,'String'));
 
-
 err=0;
 XYZmm=[xmm,ymm,zmm,1]';
 XYZvox=pV.mat\XYZmm;
@@ -824,6 +845,7 @@ ix=0;
 try
     ix=pX(round(XYZvox(1)),round(XYZvox(2)),round(XYZvox(3)));
 end
+
 if ~ix
     ix=nan;
     err=1;
@@ -860,6 +882,7 @@ function matmodality_Callback(hObject, eventdata, handles)
 %        contents{get(hObject,'Value')} returns selected item from matmodality
 refreshcv(handles);
 
+
 % --- Executes during object creation, after setting all properties.
 function matmodality_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to matmodality (see GCBO)
@@ -871,7 +894,6 @@ function matmodality_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 
 function matthresh_Callback(hObject, eventdata, handles)
@@ -894,7 +916,6 @@ function matthresh_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 
 % --- Executes on button press in vizmat.
@@ -938,7 +959,6 @@ function timecircle_Callback(hObject, eventdata, handles)
 
 % Hint: get(hObject,'Value') returns toggle state of timecircle
 refreshcv(handles);
-
 
 
 function timeframe_Callback(hObject, eventdata, handles)
@@ -987,6 +1007,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+
 function xmm_Callback(hObject, eventdata, handles)
 % hObject    handle to xmm (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -996,6 +1017,7 @@ function xmm_Callback(hObject, eventdata, handles)
 %        str2double(get(hObject,'String')) returns contents of xmm as a double
 setcoordinates(handles);
 refreshcv(handles,1);
+
 
 % --- Executes during object creation, after setting all properties.
 function xmm_CreateFcn(hObject, eventdata, handles)
@@ -1010,7 +1032,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
-
 function ymm_Callback(hObject, eventdata, handles)
 % hObject    handle to ymm (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -1020,6 +1041,7 @@ function ymm_Callback(hObject, eventdata, handles)
 %        str2double(get(hObject,'String')) returns contents of ymm as a double
 setcoordinates(handles);
 refreshcv(handles,1);
+
 
 % --- Executes during object creation, after setting all properties.
 function ymm_CreateFcn(hObject, eventdata, handles)
@@ -1034,7 +1056,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
-
 function zmm_Callback(hObject, eventdata, handles)
 % hObject    handle to zmm (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -1044,6 +1065,7 @@ function zmm_Callback(hObject, eventdata, handles)
 %        str2double(get(hObject,'String')) returns contents of zmm as a double
 setcoordinates(handles);
 refreshcv(handles,1);
+
 
 % --- Executes during object creation, after setting all properties.
 function zmm_CreateFcn(hObject, eventdata, handles)
@@ -1068,6 +1090,7 @@ function labelpopup_Callback(hObject, eventdata, handles)
 %        contents{get(hObject,'Value')} returns selected item from labelpopup
 refreshcv(handles);
 
+
 % --- Executes during object creation, after setting all properties.
 function labelpopup_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to labelpopup (see GCBO)
@@ -1079,7 +1102,6 @@ function labelpopup_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 
 % --- Executes on selection change in vatseed.
@@ -1105,7 +1127,6 @@ function vatseed_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 
 function vatthresh_Callback(hObject, eventdata, handles)
@@ -1165,6 +1186,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+
 % --- Executes on button press in lvatcheck.
 function lvatcheck_Callback(hObject, eventdata, handles)
 % hObject    handle to lvatcheck (see GCBO)
@@ -1190,9 +1212,6 @@ XYZ=[XYZ';ones(1,size(XYZ,1))];
 
 coords=V.mat*XYZ;
 coords=coords(1:3,:)';
-
-
-
 
 
 function wmatthresh_Callback(hObject, eventdata, handles)
@@ -1232,11 +1251,12 @@ if strcmp('Choose...',chosenmod{get(hObject,'Value')})
     [fn,pth]=uigetfile('*.mat','Choose connectivity matrix...');
     if fn
         set(handles.chosenwmatstr,'String',[pth,filesep,fn]);
+        set(handles.chosenwmatstr,'TooltipString',[pth,filesep,fn]);
     end
 else
     set(handles.chosenwmatstr,'String','');
+    set(handles.chosenwmatstr,'TooltipString','');
 end
-
 
 
 % --- Executes during object creation, after setting all properties.
@@ -1327,4 +1347,14 @@ function wmatlabs_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of wmatlabs
+refreshcv(handles);
+
+
+% --- Executes on button press in savefibers.
+function savefibers_Callback(hObject, eventdata, handles)
+% hObject    handle to savefibers (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of savefibers
 refreshcv(handles);

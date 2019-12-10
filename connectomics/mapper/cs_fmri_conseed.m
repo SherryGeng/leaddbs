@@ -1,11 +1,12 @@
 function cs_fmri_conseed(dfold,cname,sfile,cmd,writeoutsinglefiles,outputfolder,outputmask)
+
 tic
 
+% if ~isdeployed
+%     addpath(genpath('/autofs/cluster/nimlab/connectomes/software/lead_dbs'));
+%     addpath('/autofs/cluster/nimlab/connectomes/software/spm12');
+% end
 
-if ~isdeployed
-    addpath(genpath('/autofs/cluster/nimlab/connectomes/software/lead_dbs'));
-    addpath('/autofs/cluster/nimlab/connectomes/software/spm12');
-end
 if ~exist('writeoutsinglefiles','var')
     writeoutsinglefiles=0;
 else
@@ -13,7 +14,6 @@ else
         writeoutsinglefiles=str2double(writeoutsinglefiles);
     end
 end
-
 
 
 if ~exist('dfold','var')
@@ -25,23 +25,21 @@ else
 end
 
 disp(['Connectome dataset: ',cname,'.']);
-
+    ocname=cname;
 if ismember('>',cname)
     delim=strfind(cname,'>');
     subset=cname(delim+1:end);
     cname=cname(1:delim-1);
 end
 
-
 dfoldsurf=[dfold,'fMRI',filesep,cname,filesep,'surf',filesep];
 dfoldvol=[dfold,'fMRI',filesep,cname,filesep,'vol',filesep]; % expand to /vol subdir.
-
 
 d=load([dfold,'fMRI',filesep,cname,filesep,'dataset_info.mat']);
 dataset=d.dataset;
 clear d;
 if exist('outputmask','var')
-    if ~isempty(outputmask) 
+    if ~isempty(outputmask)
         omask=ea_load_nii(outputmask);
         omaskidx=find(omask.img(:));
         [~,maskuseidx]=ismember(omaskidx,dataset.vol.outidx);
@@ -54,25 +52,19 @@ else
     maskuseidx=1:length(dataset.vol.outidx);
 end
 
-
-[sfile,roilist]=ea_handleseeds(sfile);
-
-
 owasempty=0;
 if ~exist('outputfolder','var')
-    outputfolder=ea_getoutputfolder(sfile);
+    outputfolder=ea_getoutputfolder(sfile,ocname);
     owasempty=1;
 else
     if isempty(outputfolder) % from shell wrapper.
-        outputfolder=ea_getoutputfolder(sfile);
+        outputfolder=ea_getoutputfolder(sfile,ocname);
         owasempty=1;
     end
     if ~strcmp(outputfolder(end),filesep)
         outputfolder=[outputfolder,filesep];
     end
 end
-
-
 
 if strcmp(sfile{1}(end-2:end),'.gz')
     %gunzip(sfile)
@@ -115,7 +107,7 @@ for s=1:size(sfile,1)
             end
             seed{s,lr}.fname=oseedfname; % restore original filename if even unneccessary at present.
         end
-        
+
         [~,seedfn{s,lr}]=fileparts(sfile{s,lr});
         if dealingwithsurface
             sweights=seed{s,lr}.img(:);
@@ -124,19 +116,48 @@ for s=1:size(sfile,1)
         end
         sweights(isnan(sweights))=0;
         sweights(isinf(sweights))=0; %
-        
+
         sweights(abs(sweights)<0.0001)=0;
         sweights=double(sweights);
+        
+        try
+            options=evalin('caller','options');
+        end
+        if exist('options','var')
+            if strcmp(options.lcm.seeddef,'parcellation')
+                sweights=round(sweights);
+            end
+        end
         % assure sum of sweights is 1
         %sweights(logical(sweights))=sweights(logical(sweights))/abs(sum(sweights(logical(sweights))));
         sweightmx=repmat(sweights,1,1);
-        
+
         sweightidx{s,lr}=find(sweights);
         sweightidxmx{s,lr}=double(sweightmx(sweightidx{s,lr},:));
     end
 end
 
 numseed=s;
+try 
+    options=evalin('caller','options');
+end
+if exist('options','var')
+    if strcmp(options.lcm.seeddef,'parcellation') % expand seeds to define
+        if ismember(cmd,{'seed','pseed','pmap'})
+            ea_error('Command not supported for parcellation as input.');
+        end
+        [ixx]=unique(round(sweights)); ixx(ixx==0)=[];
+        numseed=length(ixx);
+        for parcseed=ixx'
+            sweightidx{parcseed+1,1}=sweightidx{1,1}(sweightidxmx{1,1}==parcseed);
+            sweightidxmx{parcseed+1,1}=ones(size(sweightidx{parcseed+1,1},1),1);
+        end
+        sweightidx(1)=[]; % original parcellation which has now been expanded to single seeds
+        sweightidxmx(1)=[]; % original parcellation which has now been expanded to single seeds
+        sfile=repmat(sfile,size(sweightidx,1),1);
+    end
+end
+
 disp([num2str(numseed),' seeds, command = ',cmd,'.']);
 
 
@@ -168,7 +189,7 @@ switch cmd
         end
 
     case 'pmap'
-        
+
         for s=1:numseed-1
             fX{s}=nan(length(omaskidx),numsub);
         end
@@ -183,23 +204,19 @@ switch cmd
         addp='p';
 end
 
-
-
 ea_dispercent(0,'Iterating through subjects');
-
-
 
 scnt=1;
 for mcfi=usesubjects % iterate across subjects
     howmanyruns=ea_cs_dethowmanyruns(dataset,mcfi);
     switch cmd
-        
+
         case {'seed','pseed'}
-            
+
             for s=1:numseed
-                
+
                 thiscorr=zeros(length(omaskidx),howmanyruns);
-                
+
                 for run=1:howmanyruns
                     switch dataset.type
                         case 'fMRI_matrix'
@@ -208,12 +225,11 @@ for mcfi=usesubjects % iterate across subjects
                             end
 
                             Rw=nan(length(sweightidx{s}),pixdim);
-                            
+
                             if ~exist('db','var')
                                 db=matfile([dfold,'fMRI',filesep,cname,filesep,'AllX.mat']);
                             end
-                            
-                           
+
                             cnt=1;
                             for ix=sweightidx{s}'
                                 %    testnii.img(outidx)=mat(entry,:); % R
@@ -230,7 +246,7 @@ for mcfi=usesubjects % iterate across subjects
                                 rs=load([dfoldsurf,dataset.surf.r.subIDs{mcfi}{run+1}]);
                             end
                             gmtc=single(gmtc);
-                            
+
                             switch cmd % build up seed tc for present subject
                                 case 'seed'
                                     if size(sfile(s,:),2)>1 % dealing with surface seed
@@ -242,8 +258,7 @@ for mcfi=usesubjects % iterate across subjects
                                         stc=mean(gmtc(sweightidx{s},:).*repmat(sweightidxmx{s},1,size(gmtc,2)),1); % seed time course
 
                                     end
-                                    
-                                    
+
                                 case 'pseed'
                                     clear stc
                                     for subseed=1:numseed
@@ -274,7 +289,7 @@ for mcfi=usesubjects % iterate across subjects
                     lh.fX{s}(:,scnt)=mean(ls.thiscorr,2);
                     rh.fX{s}(:,scnt)=mean(rs.thiscorr,2);
                 end
-                
+
                 if writeoutsinglefiles && (~strcmp(dataset.type,'fMRI_matrix'))
                     ccmap=dataset.vol.space;
                     ccmap.img=single(ccmap.img);
@@ -282,14 +297,30 @@ for mcfi=usesubjects % iterate across subjects
                     ccmap.img(omaskidx)=mean(thiscorr,2);
                     ccmap.dt=[16,0];
                     spm_write_vol(ccmap,ccmap.img);
+
+                    % surfs, too:
+
+                    ccmap=dataset.surf.l.space;
+                    ccmap.img=single(ccmap.img);
+                    ccmap.fname=[outputfolder,seedfn{s},'_',dataset.vol.subIDs{mcfi}{1},'_corr_surf_lh.nii'];
+                    ccmap.img(:,:,:,2:end)=[];
+                    ccmap.img(:)=mean(ls.thiscorr,2);
+                    ccmap.dt=[16,0];
+                    spm_write_vol(ccmap,ccmap.img);
+
+                    ccmap=dataset.surf.r.space;
+                    ccmap.img=single(ccmap.img);
+                    ccmap.img(:,:,:,2:end)=[];
+                    ccmap.fname=[outputfolder,seedfn{s},'_',dataset.vol.subIDs{mcfi}{1},'_corr_surf_rh.nii'];
+                    ccmap.img(:)=mean(rs.thiscorr,2);
+                    ccmap.dt=[16,0];
+                    spm_write_vol(ccmap,ccmap.img);
+
                 end
             end
 
-            
-            
         case 'pmap'
-            
-            
+
             targetix=sweightidx{1};
             clear stc
             thiscorr=cell(numseed-1,1);
@@ -300,9 +331,9 @@ for mcfi=usesubjects % iterate across subjects
                 for s=2:numseed
                     switch dataset.type
                         case 'fMRI_matrix'
-                            
+
                             ea_error('Pmap not supported with use of fMRI_Matrix (yet).');
-                            
+
                         case 'fMRI_timecourses'
                             load([dfoldvol,dataset.vol.subIDs{mcfi}{run+1}])
                             gmtc=single(gmtc);
@@ -311,19 +342,19 @@ for mcfi=usesubjects % iterate across subjects
                 end
                 % now we have all seeds, need to iterate across voxels of
                 % target to get pmap values
-                
+
                 for s=1:size(stc,2)
                     seedstc=stc(:,s);
                     otherstc=stc;
                     otherstc(:,s)=[];
-                    
+
                     targtc=gmtc(targetix,:);
                     thiscorr{s}(targetix,run)=partialcorr(targtc',seedstc,otherstc);
-                    
+
                 end
             end
-            
-            
+
+
             for s=1:size(stc,2)
                 fX{s}(:,scnt)=mean(thiscorr{s},2);
                 if writeoutsinglefiles
@@ -335,14 +366,13 @@ for mcfi=usesubjects % iterate across subjects
                     spm_write_vol(ccmap,ccmap.img);
                 end
             end
-            
-            
+
         otherwise
             clear stc
             for run=1:howmanyruns
                 load([dfoldvol,dataset.vol.subIDs{mcfi}{run+1}])
                 gmtc=single(gmtc);
-                
+
                 if size(sfile(s,:),2)>1
                     % include surface:
                     ls=load([dfoldsurf,dataset.surf.l.subIDs{mcfi}{run+1}]);
@@ -361,27 +391,27 @@ for mcfi=usesubjects % iterate across subjects
                         end
                     end
                 end
-                
+
                 switch cmd
                     case 'matrix'
                         X=corrcoef(stc');
-                        
+
                     case 'pmatrix'
                         X=partialcorr(stc');
                 end
                 thiscorr(:,run)=X(:);
-                
+
             end
             thiscorr=mean(thiscorr,2);
             X(:)=thiscorr;
             fX(:,scnt)=X(logical(triu(ones(numseed),1)));
-            
+
             if writeoutsinglefiles
                 save([outputfolder,addp,'corrMx_',dataset.vol.subIDs{mcfi}{1},'.mat'],'X','-v7.3');
             end
     end
-        ea_dispercent(scnt/numsub);
-        scnt=scnt+1;
+    ea_dispercent(scnt/numsub);
+    scnt=scnt+1;
 end
 ea_dispercent(1,'end');
 ispmap=strcmp(cmd,'pmap');
@@ -392,7 +422,7 @@ switch dataset.type
     case 'fMRI_matrix'
         switch cmd
             case {'seed'}
-                
+
                 mmap=dataset.vol.space;
                 mmap.dt=[16,0];
                 mmap.img(:)=0;
@@ -404,20 +434,17 @@ switch dataset.type
                     gzip(mmap.fname);
                     delete(mmap.fname);
                 end
-                
-                
-                
+
             otherwise
                 ea_error(['Command ',cmd,' in combination with an fMRI-matrix not (yet) supported.']);
         end
-        
+
     case 'fMRI_timecourses'
         switch cmd
             case {'seed','pmap','pseed'}
                 for s=1:size(seedfn,1) % subtract 1 in case of pmap command
-                    
                    if owasempty
-                       outputfolder=ea_getoutputfolder({sfile{s}});
+                       outputfolder=ea_getoutputfolder({sfile{s}},ocname);
                    end
                     % export mean
                     M=ea_nanmean(fX{s}',1);
@@ -426,14 +453,14 @@ switch dataset.type
                     mmap.img(:)=0;
                     mmap.img=single(mmap.img);
                     mmap.img(omaskidx)=M;
-                    
+
                     mmap.fname=[outputfolder,seedfn{s},'_func_',cmd,'_AvgR.nii'];
                     ea_write_nii(mmap);
                     if usegzip
                         gzip(mmap.fname);
                         delete(mmap.fname);
                     end
-                    
+
                     % export variance
                     M=ea_nanvar(fX{s}');
                     mmap=dataset.vol.space;
@@ -441,14 +468,14 @@ switch dataset.type
                     mmap.img(:)=0;
                     mmap.img=single(mmap.img);
                     mmap.img(omaskidx)=M;
-                    
+
                     mmap.fname=[outputfolder,seedfn{s},'_func_',cmd,'_VarR.nii'];
                     ea_write_nii(mmap);
                     if usegzip
                         gzip(mmap.fname);
                         delete(mmap.fname);
                     end
-                    
+
                     if ~ispmap && isfield(dataset,'surf')
                         % lh surf
                         lM=ea_nanmean(lh.fX{s}');
@@ -463,7 +490,7 @@ switch dataset.type
                             gzip(lmmap.fname);
                             delete(lmmap.fname);
                         end
-                        
+
                         % rh surf
                         rM=ea_nanmean(rh.fX{s}');
                         rmmap=dataset.surf.r.space;
@@ -478,8 +505,7 @@ switch dataset.type
                             delete(rmmap.fname);
                         end
                     end
-                    
-                    
+
                     % fisher-transform:
                     fX{s}=atanh(fX{s});
                     if ~ispmap && isfield(dataset,'surf')
@@ -487,7 +513,7 @@ switch dataset.type
                         rh.fX{s}=atanh(rh.fX{s});
                     end
                     % export fz-mean
-                    
+
                     M=nanmean(fX{s}');
                     mmap=dataset.vol.space;
                     mmap.dt=[16,0];
@@ -514,7 +540,7 @@ switch dataset.type
                             gzip(lmmap.fname);
                             delete(lmmap.fname);
                         end
-                        
+
                         % rh surf
                         rM=nanmean(rh.fX{s}');
                         rmmap=dataset.surf.r.space;
@@ -529,28 +555,24 @@ switch dataset.type
                             delete(rmmap.fname);
                         end
                     end
-                    
+
                     % export T
-                    
+
                     [~,~,~,tstat]=ttest(fX{s}');
                     tmap=dataset.vol.space;
                     tmap.img(:)=0;
                     tmap.dt=[16,0];
                     tmap.img=single(tmap.img);
-                    
+
                     tmap.img(omaskidx)=tstat.tstat;
-                    
+
                     tmap.fname=[outputfolder,seedfn{s},'_func_',cmd,'_T.nii'];
                     spm_write_vol(tmap,tmap.img);
                     if usegzip
                         gzip(tmap.fname);
                         delete(tmap.fname);
                     end
-                    
-                    
-                    
-                    
-                    
+
                     if ~ispmap && isfield(dataset,'surf')
                         % lh surf
                         [~,~,~,ltstat]=ttest(lh.fX{s}');
@@ -565,7 +587,7 @@ switch dataset.type
                             gzip(lmmap.fname);
                             delete(lmmap.fname);
                         end
-                        
+
                         % rh surf
                         [~,~,~,rtstat]=ttest(rh.fX{s}');
                         rmmap=dataset.surf.r.space;
@@ -581,9 +603,9 @@ switch dataset.type
                         end
                     end
                 end
-                
+
             otherwise
-                
+
                 % export mean
                 M=nanmean(fX');
                 X=zeros(numseed);
@@ -591,7 +613,7 @@ switch dataset.type
                 X=X+X';
                 X(logical(eye(length(X))))=1;
                 save([outputfolder,cmd,'_corrMx_AvgR.mat'],'X','-v7.3');
-                
+
                 % export variance
                 M=nanvar(fX');
                 X=zeros(numseed);
@@ -599,7 +621,7 @@ switch dataset.type
                 X=X+X';
                 X(logical(eye(length(X))))=1;
                 save([outputfolder,cmd,'_corrMx_VarR.mat'],'X','-v7.3');
-                
+
                 % fisher-transform:
                 fX=atanh(fX);
                 M=nanmean(fX');
@@ -608,7 +630,7 @@ switch dataset.type
                 X=X+X';
                 X(logical(eye(length(X))))=1;
                 save([outputfolder,cmd,'_corrMx_AvgR_Fz.mat'],'X','-v7.3');
-                
+
                 % export T
                 [~,~,~,tstat]=ttest(fX');
                 X=zeros(numseed);
@@ -616,10 +638,9 @@ switch dataset.type
                 X=X+X';
                 X(logical(eye(length(X))))=1;
                 save([outputfolder,cmd,'_corrMx_T.mat'],'X','-v7.3');
-                
+
         end
 end
-
 
 toc
 
@@ -633,6 +654,8 @@ ea_write_nii(s);
 
 ea_conformspaceto([td,'tmpspace.nii'],[td,'tmpseed.nii']);
 s=ea_load_nii(s.fname);
+delete([td,'tmpspace.nii']);
+delete([td,'tmpseed.nii']);
 
 
 function howmanyruns=ea_cs_dethowmanyruns(dataset,mcfi)
@@ -657,7 +680,3 @@ end
 load([datadir,num2str(rightmat),'.mat']);
 loaded=rightmat;
 
-function outputfolder=ea_getoutputfolder(sfile)
-file=sfile{1};
-[pth,fn,ext]=fileparts(file); % exit to same folder as seed.
-outputfolder=[pth,filesep];

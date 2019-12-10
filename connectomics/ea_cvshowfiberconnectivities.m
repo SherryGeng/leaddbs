@@ -8,223 +8,262 @@ function [PL,thresh]=ea_cvshowfiberconnectivities(resultfig,fibersfile,seedfile,
 % Andreas Horn
 
 set(0,'CurrentFigure',resultfig)
-colornames='rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk';
+colornames=['rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk' ...
+    'rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk' ...
+    'rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk' ...
+    'rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk' ...
+    'rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk' ...
+    'rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk' ...
+    'rbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywkrbgcmywk'];
 
 fprintf('\nCalculating Fibers/Connectivity...\n\n\n');
 
 hold on
 
-%% load fibers (either from file or from figure and store in figure for next time).
-% get app data
-disp('Loading fiberset...');
-if ~changedstates(1) % fibers file already loaded
-    fibers=getappdata(resultfig,'fibers');
+%% loadstate from file
+% set defaults
+if ~options.prefs.env.dev || ~isfield(options,'savefibers')
+    options.savefibers.save = 0;
+    options.savefibers.load = 0;
+end
+
+if ~options.savefibers.load
+    % run as normal...
+    %% load fibers (either from file or from figure and store in figure for next time).
+    % get app data
+    disp('Loading fiberset...');
+    if ~changedstates(1) && ~isempty(getappdata(resultfig,'fibers')) % fibers file already loaded
+        fibers=getappdata(resultfig,'fibers');
+        idxv=getappdata(resultfig,'idxv');
+        fibers=fibers(:,1:3);
+        fibersidx=getappdata(resultfig,'fibersidx');
+    else % load data
+        if ischar(fibersfile)
+        [fibers,fibersidx]=ea_loadfibertracts(fibersfile);
+        else
+            fibers=fibersfile.fibers;
+            fibersidx=fibersfile.fibersidx;
+            clear fibersfile
+        end
         idxv=fibers(:,4);
-    fibers=fibers(:,1:3);
-    fibersidx=getappdata(resultfig,'fibersidx');
-else % load data
-    if ischar(fibersfile)
-    [fibers,fibersidx]=ea_loadfibertracts(fibersfile);
-    else
-        fibers=fibersfile.fibers;
-        fibersidx=fibersfile.fibersidx;
-        clear fibersfile
+        fibers=fibers(:,1:3);
+        setappdata(resultfig,'fibersidx',fibersidx);
+        setappdata(resultfig,'fibers',fibers);
+        setappdata(resultfig,'idxv',idxv);
+        %setappdata(resultfig,'fibersfile',fibersfile);
     end
-    idxv=fibers(:,4);
-    fibers=fibers(:,1:3);
-    setappdata(resultfig,'fibersidx',fibersidx);
-    setappdata(resultfig,'fibers',fibers);
-    %setappdata(resultfig,'fibersfile',fibersfile);
-end
-numtotalfibs=length(fibersidx);
+    numtotalfibs=length(fibersidx);
 
-if strcmp(thresh,'auto')
-    switch mode
-        case 'vat'
-    thresh=round(numtotalfibs/20000);
-        case 'mat'
-         thresh=round(numtotalfibs/5000);
-    end
-else
-    thresh=round(str2double(thresh));
-end
-fprintf('Done.\n\n\n');
-
-%% load seed definition
-
-if ~changedstates(2)
-    seed=getappdata(resultfig,'seed');
-else % load data
-    if iscell(seedfile)
-        for s=1:length(seedfile);
-            seed{s}=ea_load_nii(seedfile{s});
+    if strcmp(thresh,'auto')
+        switch mode
+            case 'vat'
+                thresh=round(numtotalfibs/20000);
+            case 'mat'
+                thresh=round(numtotalfibs/5000);
         end
     else
-        seed{1}=seedfile;
-        clear seedfile
+        thresh=round(str2double(thresh));
     end
-    setappdata(resultfig,'seed',seed);
-end
+    fprintf('Done.\n\n\n');
 
-%% load targets definition
-
-
-if ~changedstates(3)
-    targets=getappdata(resultfig,'targets');
-else % load data
-    if ischar(targetsfile)
-        targets=ea_load_nii(targetsfile);
-    else
-        targets=targetsfile;
-        clear targetfile
+    %% load seed definition
+    if ~changedstates(2)
+        seed=getappdata(resultfig,'seed');
+    else % load data
+        if iscell(seedfile)
+            seed = cell(1, length(seedfile));
+            for s=1:length(seedfile)
+                seed{s}=ea_load_nii(seedfile{s});
+            end
+        else
+            seed{1}=seedfile;
+            clear seedfile
+        end
+        setappdata(resultfig,'seed',seed);
     end
-    setappdata(resultfig,'targets',targets);
-end
-origtargets=targets; % original targets map.
 
-%% prepare fibers
-% dispercent(0,'Preparing fibers');
-% [idx,~]=cellfun(@size,fibers);
-%
-% fibers=cell2mat(fibers');
-% idxv=zeros(size(fibers,1),1);
-% lid=1; cnt=1;
-% for id=idx
-%     dispercent(cnt/length(idx));
-%     idxv(lid:lid+id-1)=cnt;
-%     lid=lid+id;
-%     cnt=cnt+1;
-% end
-% dispercent(1,'end');
+    %% load targets definition
+    if ~changedstates(3)
+        targets=getappdata(resultfig,'targets');
+    else % load data
+        if ischar(targetsfile)
+            targets=ea_load_nii(targetsfile);
+        else
+            targets=targetsfile;
+            clear targetfile
+        end
+        setappdata(resultfig,'targets',targets);
+    end
+    origtargets=targets; % original targets map.
 
-%% select fibers that traverse through seed voxels
-[seed_fv,volume]=ea_fvseeds(seed,options);
+    %% prepare fibers
+    % dispercent(0,'Preparing fibers');
+    % [idx,~]=cellfun(@size,fibers);
+    %
+    % fibers=cell2mat(fibers');
+    % idxv=zeros(size(fibers,1),1);
+    % lid=1; cnt=1;
+    % for id=idx
+    %     dispercent(cnt/length(idx));
+    %     idxv(lid:lid+id-1)=cnt;
+    %     lid=lid+id;
+    %     cnt=cnt+1;
+    % end
+    % dispercent(1,'end');
 
-dispercent(0,'Selecting connecting fibers...');
-cnt=1;
-for side=1:length(seed)
+    %% select fibers that traverse through seed voxels
+    [seed_fv,volume]=ea_fvseeds(seed,options);
 
-    in=ea_intriangulation(seed_fv{side}.vertices,seed_fv{side}.faces,fibers);
-    selectedfibs{side}=unique(idxv(in));
+    dispercent(0,'Selecting connecting fibers...');
+    cnt=1;
+    selectedfibs = cell(1, length(seed));
+    for side=1:length(seed)
+        % adhusch: pre-filtering fibers outside "euclidian hull" around seed for further speed-up
+        [~,D] = knnsearch(mean(seed_fv{side}.vertices),fibers);
+        maxD = max(pdist2(mean(seed_fv{side}.vertices),seed_fv{side}.vertices));
+        prefiltIdx = (D <= maxD); % has length all fibers
+
+        % adhusch: filter fiberes with respect to the real seed shape
+        filtPrefiltIdx = inpolyhedron(seed_fv{side}, fibers(prefiltIdx,:), 'flipnormals', true); % massive speed up compared to ea_intriangulation (approx. factor 10?)
+
+        % filtPrefiltIdx has only length of prefiltered fibre subset!
+        filtIdx = prefiltIdx;
+        filtIdx(prefiltIdx) = filtPrefiltIdx; % filter of all fibers
+
+        selectedfibs{side}=unique(idxv(filtIdx)); % mapping individual points back to fibers
         dispercent(cnt/length(sides));
-    cnt=cnt+1;
-end
-
-dispercent(1,'end');
-connectingfibs=cell(2,1);
-
-%% reformat fibers
-disp('Reformating fibers...');
-fibers=mat2cell(fibers,fibersidx,3)';
-fprintf('Done.\n\n\n');
-for side=1:length(seed)
-    try      sideselectedfibs{side}=unique(cell2mat(selectedfibs(:,side))); end
-
-    try      connectingfibs{side}=fibers(sideselectedfibs{side}); end
-end
-
-%% check which areas are connected to VAT by fibers:
-doubleconnectingfibs=cell(2,1);
-
-la=1;
-for side=1:length(seed)
-
-    todelete{side}=[];
-
-    cnt=1; % reset cnt.
-
-    %% extract areas connected by fibres.
-
-    if options.writeoutpm && ~exist('pm','var')
-        pm=targets;
-        pm.img(:)=0;
+        cnt=cnt+1;
     end
 
-    [~,labelname]=fileparts(targets.fname);
-    aID = fopen(fullfile(ea_space([],'labeling'),[labelname,'.txt']));
-    atlas_lgnd=textscan(aID,'%d %s');
-    allcareas=[];
+    dispercent(1,'end');
+    connectingfibs=cell(2,1);
 
-    fibmax=length(connectingfibs{side});
-    dispercent(0,'Gathering region information');
-    for fib=1:fibmax
-        dispercent(fib/fibmax);
-
-        thisfibendpoints=[connectingfibs{side}{fib}(1,1:3);connectingfibs{side}{fib}(end,1:3)];
-        thisfibendpoints=targets.mat\[thisfibendpoints,ones(2,1)]'; % mm 2 vox
-        thisfibendpoints=double(thisfibendpoints(1:3,:));
-
-        conareas=spm_sample_vol(targets,thisfibendpoints(1,:),thisfibendpoints(2,:),thisfibendpoints(3,:),0);
-        if any(conareas)
-            doubleconnectingfibs{side}{la,cnt}=connectingfibs{side}{fib};
-            todelete{side}=[todelete{side},fib];
-            cnt=cnt+1;
+    %% reformat fibers
+    disp('Reformating fibers...');
+    fibers=mat2cell(fibers,fibersidx,3)';
+    fprintf('Done.\n\n\n');
+    sideselectedfibs = cell(1, length(seed));
+    for side=1:length(seed)
+        try
+            sideselectedfibs{side}=unique(cell2mat(selectedfibs(:,side)));
         end
 
-        if options.writeoutpm
-            try
+        try
+            connectingfibs{side}=fibers(sideselectedfibs{side});
+        end
+    end
 
-                pm.img(round(thisfibendpoints(1,1)),round(thisfibendpoints(2,1)),round(thisfibendpoints(3,1)))=...
-                    pm.img(round(thisfibendpoints(1,1)),round(thisfibendpoints(2,1)),round(thisfibendpoints(3,1)))+1;
-                pm.img(round(thisfibendpoints(1,2)),round(thisfibendpoints(2,2)),round(thisfibendpoints(3,2)))=...
-                    pm.img(round(thisfibendpoints(1,2)),round(thisfibendpoints(2,2)),round(thisfibendpoints(3,2)))+1;
+    %% check which areas are connected to VAT by fibers:
+    doubleconnectingfibs=cell(2,1);
+
+    la = 1;
+    todelete = cell(1, length(seed));
+    howmanyfibs = cell(1, length(seed));
+    tareas = cell(1, length(seed));
+    for side=1:length(seed)
+
+        todelete{side}=[];
+        cnt=1; % reset cnt.
+
+        %% extract areas connected by fibers.
+        if options.writeoutpm && ~exist('pm','var')
+            pm=targets;
+            pm.img(:)=0;
+        end
+
+        [~,labelname]=fileparts(targets.fname);
+        aID = fopen(fullfile(ea_space([],'labeling'),[labelname,'.txt']));
+        atlas_lgnd=textscan(aID,'%d %s');
+        allcareas=[];
+
+        fibmax=length(connectingfibs{side});
+        dispercent(0,'Gathering region information');
+        for fib=1:fibmax
+            dispercent(fib/fibmax);
+
+            thisfibendpoints=[connectingfibs{side}{fib}(1,1:3);connectingfibs{side}{fib}(end,1:3)];
+            thisfibendpoints=targets.mat\[thisfibendpoints,ones(2,1)]'; % mm 2 vox
+            thisfibendpoints=double(thisfibendpoints(1:3,:));
+
+            conareas=spm_sample_vol(targets,thisfibendpoints(1,:),thisfibendpoints(2,:),thisfibendpoints(3,:),0);
+            if any(conareas)
+                doubleconnectingfibs{side}{la,cnt}=connectingfibs{side}{fib};
+                todelete{side}=[todelete{side},fib];
+                cnt=cnt+1;
+            end
+
+            if options.writeoutpm
+                try
+                    pm.img(round(thisfibendpoints(1,1)),round(thisfibendpoints(2,1)),round(thisfibendpoints(3,1)))=...
+                        pm.img(round(thisfibendpoints(1,1)),round(thisfibendpoints(2,1)),round(thisfibendpoints(3,1)))+1;
+                    pm.img(round(thisfibendpoints(1,2)),round(thisfibendpoints(2,2)),round(thisfibendpoints(3,2)))=...
+                        pm.img(round(thisfibendpoints(1,2)),round(thisfibendpoints(2,2)),round(thisfibendpoints(3,2)))+1;
+                end
+            end
+            allcareas=[allcareas, conareas];
+        end
+        allcareas=round(allcareas);
+        dispercent(100, 'end');
+
+        atlength=length(atlas_lgnd{1});
+        howmanyfibs{side}=zeros(atlength,1);
+        tareas{side}=[];
+
+        tcnt=1;
+        for reg=1:atlength
+            howmanyfibs{side}(reg)=sum(allcareas==reg); % how many fibers connect VAT and anat. region.
+            if howmanyfibs{side}(reg)>(thresh(1))
+                tareas{side}(tcnt)=reg;
+                tcnt=tcnt+1;
             end
         end
-        allcareas=[allcareas,conareas];
-    end
-    allcareas=round(allcareas);
-    dispercent(100,'end');
-
-    atlength=length(atlas_lgnd{1});
-    howmanyfibs{side}=zeros(atlength,1);
-    tareas{side}=[];
-
-    tcnt=1;
-    for reg=1:atlength
-        howmanyfibs{side}(reg)=sum(allcareas==reg); % how many fibers connect VAT and anat. region.
-        if howmanyfibs{side}(reg)>(thresh(1))
-            tareas{side}(tcnt)=reg;
-            tcnt=tcnt+1;
-        end
-    end
-    tareas{side}=unique(tareas{side});
+        tareas{side}=unique(tareas{side});
 
 
-    % Write out connectivity stats
-    if options.writeoutstats
-
-        load([options.root,options.patientname,filesep,'ea_stats']);
-        % assign the place where to write stim stats into struct
-        if isfield(options,'groupmode')
-            if options.groupmode
-                stimparams.label=['gs_',options.groupid];
+        % Write out connectivity stats
+        if options.writeoutstats
+            load([options.root,options.patientname,filesep,'ea_stats']);
+            % assign the place where to write stim stats into struct
+            if isfield(options,'groupmode')
+                if options.groupmode
+                    stimparams.label=['gs_',options.groupid];
+                end
             end
+            [ea_stats,thisstim]=ea_assignstimcnt(ea_stats,stimparams);
+            ea_stats.stimulation(thisstim).ft(side).fibercounts{la}=howmanyfibs{side}/numtotalfibs;
+
+            ea_stats.stimulation(thisstim).ft(side).nfibercounts{la}=ea_stats.stimulation(thisstim).ft(side).fibercounts{la}/volume{side};
+            ea_stats.stimulation(thisstim).ft(side).labels{la}=atlas_lgnd{2};
+            save([options.root,options.patientname,filesep,'ea_stats'],'ea_stats');
         end
-        [ea_stats,thisstim]=ea_assignstimcnt(ea_stats,stimparams);
-        ea_stats.stimulation(thisstim).ft(side).fibercounts{la}=howmanyfibs{side}/numtotalfibs;
 
-        ea_stats.stimulation(thisstim).ft(side).nfibercounts{la}=ea_stats.stimulation(thisstim).ft(side).fibercounts{la}/volume{side};
-        ea_stats.stimulation(thisstim).ft(side).labels{la}=atlas_lgnd{2};
-        save([options.root,options.patientname,filesep,'ea_stats'],'ea_stats');
+        contargets=round(targets.img);
+        otargets=contargets;
+        contargets(:)=0;
+        for target=1:atlength
+            contargets(otargets==target)=howmanyfibs{side}(target);
+        end
+        %targets.img(targets.img<thresh)=0;
     end
 
-
-
-
-
-    contargets=round(targets.img);
-    otargets=contargets;
-    contargets(:)=0;
-    for target=1:atlength
-       contargets(otargets==target)=howmanyfibs{side}(target);
+    if options.savefibers.save && exist(options.savefibers.dir,'dir')
+        wsp = whos;
+        argin = {'resultfig','fibersfile','seedfile','targetsfile','sides','options','stimparams','changedstates','mode','showregs','showlabs'};
+        vars = strcat('''',setdiff({wsp(:).name},argin),''',');
+        vars = [vars{:}];
+        str2eval = sprintf('save([''%s'',''%s''],%s)',options.savefibers.dir,'workspace.mat',vars(1:end-1));
+        eval(str2eval)
     end
-    %targets.img(targets.img<thresh)=0;
 
+elseif options.savefibers.load
+    load([options.savefibers.dir,'workspace.mat'])
+end
 
+for side=1:length(seed)
     % always show seed patch (i.e. VAT)
     PL.matseedsurf{side}=ea_showseedpatch(resultfig,seed{side},seed{side}.img,options);
 
-        [PL.matsurf{side},PL.conlabels{side}]=ea_showconnectivitypatch(resultfig,targets,contargets,thresh,atlas_lgnd{2},tareas{side},[],showregs,showlabs);
+    [PL.matsurf{side},PL.conlabels{side}]=ea_showconnectivitypatch(resultfig,targets,contargets,thresh,atlas_lgnd{2},tareas{side},[],showregs,showlabs);
 
     clear allcareas conareas
 %     %% now show areas
@@ -251,9 +290,6 @@ for side=1:length(seed)
 %             else
 %                 centroid=XYZ; % only one entry coordinate.
 %             end
-%
-%
-%             %%
 %
 %             if options.prefs.lhullmethod==2 % use isosurface
 %
@@ -286,9 +322,6 @@ for side=1:length(seed)
 %                 end
 %                 % set cdata
 %
-%
-%
-%
 %                 if ~isfield(stimparams,'group')
 %                     cdat=abs(repmat(anatarea*(64/length(tareas{side})),length(fv.vertices),1)... % C-Data for surface
 %                         +randn(length(fv.vertices),1)*2)';
@@ -308,55 +341,38 @@ for side=1:length(seed)
 %
 %             else
 %
-%
 %                 PL.regionsurfs(la,side,anatarea)=trisurf(k,XYZ(:,1),XYZ(:,2),XYZ(:,3),...
 %                     abs(repmat(anatarea*(64/length(tareas{side})),length(XYZ),1)...
 %                     +randn(length(XYZ),1)*0.1*length(tareas{side}))');
 %             end
-%
-%
-%
-%
-%
-%             %%
-%
-%
-%
 %
 %             %% shading etc.
 %             colorc=colornames(anatarea);
 %             colorc=rgb(colorc);
 %             ea_spec_atlas(PL.regionsurfs(la,side,anatarea),'labeling',jet,1);
 %
-%
 %             %% put a label to it
 %             thislabel=sub2space(atlas_lgnd{2}{atlas_lgnd{1}==tareas{side}(anatarea)});
 %             PL.conlabels(la,side,anatarea)=text(centroid(1),centroid(2),centroid(3),thislabel,'VerticalAlignment','Baseline');
 %         end
-%
 %     end
 end
 clear tareas
 
-
-
-
-
 % Write out probability map of fiber terminals
 if options.writeoutpm
-
     pm.dt=[16,0];
     pm.fname=[options.root,options.patientname,filesep,'ea_pm','.nii'];
     spm_write_vol(pm,pm.img);
-
 end
-
-
-
 
 % plot fibers that do connect to seed:
 for side=1:length(options.sides)
     if ~isempty(connectingfibs{side})
+        % Remove single point
+        single = cellfun(@(x) all(size(x)==[1,3]),connectingfibs{side});
+        connectingfibs{side}(single)=[];
+
         fibmax=length(connectingfibs{side});
 
         if fibmax>options.prefs.d3.maxfibers % if too many fibers are selected, reduce amount of them.
@@ -368,36 +384,34 @@ for side=1:length(options.sides)
 
         for fib=1:fibmax
             dispercent(fib/fibmax);
-            %for segment=1:length(connectingfibs{fib})-1;
+            %for segment=1:length(connectingfibs{fib})-1
             connectingfibs{side}{la,fib}=connectingfibs{side}{la,fib}';
 
-
             if ~isfield(stimparams,'group')
-                connectingfibs{side}{la,fib}(4,:)=detcolor(connectingfibs{side}{la,fib}); % add coloring information to the 4th column.
+                connectingfibs{side}{la,fib}(4:6,:)=detcolor(connectingfibs{side}{la,fib}); % add coloring information to the 4th-6th column.
             else % if more than one group is analyzed, coloring info will be off the group color.
-                RGB=zeros(1,1,3);
-                RGB(:,:,1)=stimparams(1).groupcolors(stimparams(1).group,1);
-                RGB(:,:,2)=stimparams(1).groupcolors(stimparams(1).group,2);
-                RGB(:,:,3)=stimparams(1).groupcolors(stimparams(1).group,3);
+%                 RGB=zeros(1,1,3);
+%                 RGB(:,:,1)=stimparams(1).groupcolors(stimparams(1).group,1);
+%                 RGB(:,:,2)=stimparams(1).groupcolors(stimparams(1).group,2);
+%                 RGB(:,:,3)=stimparams(1).groupcolors(stimparams(1).group,3);
+%
+%                 connectingfibs{side}{la,fib}(4,:)=rgb2ind(RGB,jet);
 
-                connectingfibs{side}{la,fib}(4,:)=rgb2ind(RGB,jet);
+                RGB=zeros(1,3);
+                RGB(:,1)=stimparams(1).groupcolors(stimparams(1).group,1);
+                RGB(:,2)=stimparams(1).groupcolors(stimparams(1).group,2);
+                RGB(:,3)=stimparams(1).groupcolors(stimparams(1).group,3);
+                connectingfibs{side}{la,fib}(4:6,:) = repmat(RGB, size(connectingfibs{side}{fib},2), 1)';
             end
 
-
-
-
-            for dim=1:4
-                thisfib(dim,:)=double(interp1q([1:size(connectingfibs{side}{fib},2)]',connectingfibs{side}{fib}(dim,:)',[1:0.1:size(connectingfibs{side}{fib},2)]')');
+            for dim=1:size(connectingfibs{side}{fib},1)
+                thisfib(dim,:)=double(interp1q((1:size(connectingfibs{side}{fib},2))',connectingfibs{side}{fib}(dim,:)',(1:0.1:size(connectingfibs{side}{fib},2))')');
             end
             % plot fibers
-           [PL.fib_plots.fibs(side,fib),fv(fib)]=ea_plot_fiber(thisfib,6,0,options);
-
-
+            [PL.fib_plots.fibs(side,fib),fv(fib)]=ea_plot_fiber(thisfib,6,0,options);
 
             % store for webexport
-
             jetlist=jet;
-
             try
                 PL.bbfibfv(fib).vertices=thisfib(1:3,:)';
                 PL.bbfibfv(fib).faces=[1:size(thisfib,2)-1;2:size(thisfib,2)]';
@@ -405,31 +419,21 @@ for side=1:length(options.sides)
                 PL.bbfibfv(fib).colors=[squeeze(ind2rgb(round(thisfib(4,:)),jetlist)),repmat(0.7,size(thisfib,2),1)];
             end
 
-
-
-
-
-
             clear thisfib
-
         end
         if strcmp(options.prefs.d3.fiberstyle,'tube')
-            fv=ea_concatfv(fv);
-            set(0,'CurrentFigure',resultfig);
-            PL.fib_plots.fibs(side,1)=patch(fv,'Facecolor', 'interp', 'EdgeColor', 'none','FaceAlpha',0.2);
-            set(PL.fib_plots.fibs(side,1),'FaceVertexCData',squeeze(ind2rgb(get(PL.fib_plots.fibs(side,1),'FaceVertexCData'),jet)));
-            PL.fib_plots.fibs(:,2:end)=[];
-        end
-
-
-
+             fv=ea_concatfv(fv);
+             set(0,'CurrentFigure',resultfig);
+             PL.fib_plots.fibs(side,1)=patch(fv,'Facecolor', 'interp', 'EdgeColor', 'none','FaceAlpha',0.2);
+             set(PL.fib_plots.fibs(side,1),'FaceVertexCData', get(PL.fib_plots.fibs(side,1),'FaceVertexCData'));
+             PL.fib_plots.fibs(:,2:end)=[];
+         end
 
         dispercent(100,'end');
 
-        if strcmp(options.prefs.d3.fiberstyle,'line');
+        if strcmp(options.prefs.d3.fiberstyle,'line')
                     fibInd = ishandle(PL.fib_plots.fibs(side,:));
             if verLessThan('matlab','8.4') % ML <2014b support
-
                 set(PL.fib_plots.fibs(side,logical(PL.fib_plots.fibs(side,fibInd))),'EdgeAlpha',0.05);
             else
                 try
@@ -442,26 +446,26 @@ for side=1:length(options.sides)
                     set(PL.fib_plots.fibs(side,fibInd), 'SpecularStrength', 0.5)
                     set(PL.fib_plots.fibs(side,fibInd),'FaceAlpha',0);
                     set(PL.fib_plots.fibs(side,fibInd),'Tag',sprintf('Fiber%d',side));
-
                 end
             end
         end
         try
-            fiberbutton=uitoggletool(PL.ht,'CData',ea_get_icn('fibers_vat'),'TooltipString','Fibers (Electrode only)','OnCallback',{@objvisible,PL.fib_plots.fibs(side,:),resultfig,'fibson',[],side,1},'OffCallback',{@objvisible,PL.fib_plots.fibs(side,:),resultfig,'fibson',[],side,0},'State',getstate(fibson(side)));
+            fiberbutton=uitoggletool(PL.ht,'CData',ea_get_icn('fibers_vat'), ...
+                'TooltipString', 'Fibers (Electrode only)', ...
+                'OnCallback',{@objvisible,PL.fib_plots.fibs(side,:),resultfig,'fibson',[],side,1}, ...
+                'OffCallback',{@objvisible,PL.fib_plots.fibs(side,:),resultfig,'fibson',[],side,0}, ...
+                'State',getstate(fibson(side)));
         end
     end
 end
 
-
 % plot seed surface:
-
-
-
 setappdata(resultfig,[mode,'PL'],PL);
 
 
 function [fv,volume]=ea_fvseeds(seed,options)
-
+volume = cell(1, length(seed));
+fv = cell(1, length(seed));
 for s=1:length(seed)
     volume{s}=sum(seed{s}.img(:))*seed{s}.mat(1)*seed{s}.mat(6)*seed{s}.mat(11);
     fv{s}=isosurface(permute(seed{s}.img,[2,1,3]),0.3);
@@ -480,7 +484,8 @@ rgb=[rgb,rgb(:,end)];
 rgbim=zeros(1,size(rgb,2),3);
 rgbim(1,:,:)=rgb';
 try
-indcol=double(rgb2ind(rgbim,jet));
+    indcol=rgb2ind(rgbim,jet);
+    indcol=squeeze(ind2rgb(indcol,jet))';
 catch
     keyboard
 end
@@ -712,7 +717,7 @@ blocks = max(1,floor(n/(memblock/nt)));
 aNr = repmat(aN,1,length(1:blocks:n));
 for i = 1:blocks
     j = i:blocks:n;
-    if size(aNr,2) ~= length(j),
+    if size(aNr,2) ~= length(j)
         aNr = repmat(aN,1,length(j));
     end
     in(j) = all((nrmls*testpts(j,:)' - aNr) >= -tol,1)';
@@ -727,19 +732,13 @@ if nargin==2
     if strcmp(varargin{2},'end')
         fprintf('\n')
         fprintf('\n')
-
         fprintf('\n')
-
     else
         fprintf(1,[varargin{2},':     ']);
-
-
     end
 else
     fprintf(1,[repmat('\b',1,(length(num2str(percent))+1)),'%d','%%'],percent);
 end
-
-
 
 
 function str=getstate(val)
@@ -757,7 +756,6 @@ XYZ=[XYZ';ones(1,size(XYZ,1))];
 
 coords=V.mat*XYZ;
 coords=coords(1:3,:)';
-
 
 
 function hn=ea_arrow3(p1,p2,s,w,h,ip,alpha,beta)
@@ -1101,60 +1099,98 @@ function hn=ea_arrow3(p1,p2,s,w,h,ip,alpha,beta)
 %-------------------------------------------------------------------------
 % Error Checking
 global LineWidthOrder ColorOrder
-if nargin<8 || isempty(beta), beta=0.4; end
-beta=abs(beta(1)); if nargout, hn=[]; end
+if nargin<8 || isempty(beta)
+    beta=0.4;
+end
+beta=abs(beta(1));
+if nargout
+    hn=[];
+end
 if strcmpi(p1,'colors')                            % plot color table
-    if nargin>1, beta=abs(p2(1)); end
-    ea_LocalColorTable(1,beta); return
+    if nargin>1
+        beta=abs(p2(1));
+    end
+    ea_LocalColorTable(1,beta);
+    return
 end
 fig=gcf; ax=gca;
 if strcmpi(p1,'update'), ad=getappdata(ax,'Arrow3');    % update
     ea_LocalLogCheck(ax);
-    if size(ad,2)<13, error('Invalid AppData'), end
+    if size(ad,2)<13
+        error('Invalid AppData');
+    end
     setappdata(ax,'Arrow3',[]); sf=[1,1,1]; flag=0;
     if nargin>1
         if strcmpi(p2,'colors'), flag=1;               % update colors
         elseif ~isempty(p2)                            % update surfaces
             sf=p2(1)*sf; n=length(p2(:));
-            if n>1, sf(2)=p2(2); if n>2, sf(3)=p2(3); end, end
+            if n>1
+                sf(2)=p2(2);
+                if n>2
+                    sf(3)=p2(3);
+                end
+            end
         end
     end
-    H=ea_LocalUpdate(fig,ax,ad,sf,flag); if nargout, hn=H; end, return
+    H=ea_LocalUpdate(fig,ax,ad,sf,flag);
+    if nargout
+        hn=H;
+    end
+    return
 end
 InputError=['Invalid input, type HELP ',upper(mfilename),...
     ' for usage examples'];
-if nargin<2, error(InputError), end
+if nargin<2
+    error(InputError);
+end
 [r1,c1]=size(p1); [r2,c2]=size(p2);
-if c1<2 || c1>3 || r1*r2==0, error(InputError), end
-if r1~=r2, error('P1 and P2 must have same number of rows'), end
-if c1~=c2, error('P1 and P2 must have same number of columns'), end
+if c1<2 || c1>3 || r1*r2==0
+    error(InputError);
+end
+if r1~=r2
+    error('P1 and P2 must have same number of rows');
+end
+if c1~=c2
+    error('P1 and P2 must have same number of columns');
+end
 p=sum(abs(p2-p1),2)~=0; cone=0;
 if nargin>5 && ~isempty(ip) && strcmpi(ip,'cone')  % cone plot
     cone=1; p=sum(p2,2)~=0;
-    if ~any(p), error('P2 cannot equal 0'), end
+    if ~any(p)
+        error('P2 cannot equal 0');
+    end
     set(ax,'tag','Arrow3ConePlot');
-elseif ~any(p), error('P1 cannot equal P2')
+elseif ~any(p)
+    error('P1 cannot equal P2');
 end
 if ~all(p)
     warning('Arrow3:ZeroMagnitude','Zero magnitude ignored')
     p1=p1(p,:); p2=p2(p,:); [r1,c1]=size(p1);
 end
 n=r1; Zeros=zeros(n,1);
-if c1==2, p1=[p1,Zeros]; p2=[p2,Zeros];
-elseif ~any([p1(:,3);p2(:,3)]), c1=2; end
+if c1==2
+    p1=[p1,Zeros];
+    p2=[p2,Zeros];
+elseif ~any([p1(:,3);p2(:,3)])
+    c1=2;
+end
 L=get(ax,'LineStyleOrder'); C=get(ax,'ColorOrder');
 ST=get(ax,'DefaultSurfaceTag'); LT=get(ax,'DefaultLineTag');
 EC=get(ax,'DefaultSurfaceEdgeColor');
 if strcmp(get(ax,'nextplot'),'add') && strcmp(get(fig,'nextplot'),'add')
     Xr=get(ax,'xlim'); Yr=get(ax,'ylim'); Zr=get(ax,'zlim');
     [xs,ys,xys]=ea_LocalLogCheck(ax); restore=1;
-    if xys, mode='auto';
-        if any([p1(:,3);p2(:,3)]), error('3D log plot not supported'), end
+    if xys
+        mode='auto';
+        if any([p1(:,3);p2(:,3)])
+            error('3D log plot not supported');
+        end
         if (xs && ~all([p1(:,1);p2(:,1)]>0)) || ...
-                (ys && ~all([p1(:,2);p2(:,2)]>0))
+           (ys && ~all([p1(:,2);p2(:,2)]>0))
             error('Nonpositive log data not supported')
         end
-    else mode='manual';
+    else
+        mode='manual';
         if strcmp(get(ax,'WarpToFill'),'on')
             warning('Arrow3:WarpToFill',['Stretch-to-fill scaling not ',...
                 'supported;\nuse DASPECT or PBASPECT before calling ARROW3.']);
@@ -1162,8 +1198,16 @@ if strcmp(get(ax,'nextplot'),'add') && strcmp(get(fig,'nextplot'),'add')
     end
     set(ax,'XLimMode',mode,'YLimMode',mode,'ZLimMode',mode,...
         'CLimMode','manual');
-else restore=0; cla reset; xys=0; set(fig,'nextplot','add');
-    if c1==2, azel=[0,90]; else azel=[-37.5,30]; end
+else
+    restore=0;
+    cla reset;
+    xys=0;
+    set(fig,'nextplot','add');
+    if c1==2
+        azel=[0,90];
+    else
+        azel=[-37.5,30];
+    end
     setappdata(ax,'Arrow3',[]);
     set(ax,'nextplot','add','View',azel);
 end
@@ -1171,26 +1215,41 @@ end
 %-------------------------------------------------------------------------
 % Style Control
 [vc,cn]=ea_LocalColorTable(0); prefix=''; OneColor=0;
-if nargin<3, [c,ls,lw]=LocalValidateCLSW;% default color, linestyle/width
+if nargin<3
+    [c,ls,lw]=LocalValidateCLSW;% default color, linestyle/width
 else
     [c,ls,lw]=LocalValidateCLSW(s);
-    if length(c)>1, if sum('_^'==c(1)), prefix=c(1); end, c=c(2); end
+    if length(c)>1
+        if sum('_^'==c(1))
+            prefix=c(1);
+        end
+        c=c(2);
+    end
     if c=='x'                              % random named color (less white)
         [ignore,i]=sort(rand(1,23)); c=cn(i,:);        %#ok
     elseif c=='o'                                    % ColorOrder
-        if length(ColorOrder)
+        if ~isempty(ColorOrder)
             [c,failed]=ea_LocalColorMap(lower(ColorOrder),vc,cn,beta);
             if failed, ColorOrderWarning=['Invalid ColorOrder ',...
                     'variable, current ColorOrder property will be used'];
                 warning('Arrow3:ColorOrder',ColorOrderWarning)
-            else C=c;
+            else
+                C=c;
             end
         end, c=C;
-    elseif c=='|', map=get(fig,'colormap');          % magnitude coloring
-        M=(p1-p2); M=sqrt(sum(M.*M,2)); minM=min(M); maxM=max(M);
-        if maxM-minM<1, minM=0; end
+    elseif c=='|'
+        map=get(fig,'colormap');          % magnitude coloring
+        M=(p1-p2);
+        M=sqrt(sum(M.*M,2));
+        minM=min(M);
+        maxM=max(M);
+        if maxM-minM<1
+            minM=0;
+        end
         set(ax,'clim',[minM,maxM]); c=ea_LocalInterp(minM,maxM,map,M);
-    elseif ~sum(vc==c), c='k'; ColorWarning=['Invalid color switch, ',...
+    elseif ~sum(vc==c)
+        c='k';
+        ColorWarning=['Invalid color switch, ',...
             'default color (black) will be used'];
         warning('Arrow3:Color',ColorWarning)
     end
@@ -1199,25 +1258,36 @@ if length(c)==1                                    % single color
     c=ea_LocalColorMap([prefix,c],vc,cn,beta); OneColor=1;
 end
 set(ax,'ColorOrder',c); c=ea_LocalRepmat(c,[ceil(n/size(c,1)),1]);
-if ls~='*', set(ax,'LineStyleOrder',ls); end       % LineStyleOrder
+if ls~='*'
+    set(ax,'LineStyleOrder',ls);
+end    % LineStyleOrder
 if lw=='/'                                         % LineWidthOrder
-    if length(LineWidthOrder)
+    if ~isempty(LineWidthOrder)
         lw=ea_LocalRepmat(LineWidthOrder(:),[ceil(n/length(LineWidthOrder)),1]);
-    else lw=0.5; LineWidthOrderWarning=['Undefined LineWidthOrder, ',...
+    else
+        lw=0.5;
+        LineWidthOrderWarning=['Undefined LineWidthOrder, ',...
             'default width (0.5) will be used'];
         warning('Arrow3:LineWidthOrder',LineWidthOrderWarning)
     end
 end
-if nargin<4 || isempty(w), w=1; end                % width
+if nargin<4 || isempty(w)
+    w=1;
+end                % width
 w=ea_LocalRepmat(abs(w(:)),[ceil(n/length(w)),1]);
-if nargin<5 || isempty(h), h=3*w; end              % height
+if nargin<5 || isempty(h)
+    h=3*w;
+end              % height
 h=ea_LocalRepmat(abs(h(:)),[ceil(n/length(h)),1]);
 if nargin>5 && ~isempty(ip) && ~cone               % ip
     ip=ea_LocalRepmat(ip(:),[ceil(n/length(ip)),1]);
     i=find(ip==0); ip(i)=w(i);
-else ip=-ones(n,1);
+else
+    ip=-ones(n,1);
 end
-if nargin<7 || isempty(alpha), alpha=1; end
+if nargin<7 || isempty(alpha)
+    alpha=1;
+end
 a=ea_LocalRepmat(alpha(:),[ceil(n/length(alpha)),1]); % FaceAlpha
 
 %-------------------------------------------------------------------------
@@ -1232,13 +1302,20 @@ if xys
     set(ax,'DataAspectRatio',[par(2),par(1),par(3)]);
     % map coordinates onto unit square
     q=[p1;p2]; xr=Xr; yr=Yr;
-    if xs, xr=log10(xr); q(:,1)=log10(q(:,1)); end
-    if ys, yr=log10(yr); q(:,2)=log10(q(:,2)); end
+    if xs
+        xr=log10(xr);
+        q(:,1)=log10(q(:,1));
+    end
+    if ys
+        yr=log10(yr);
+        q(:,2)=log10(q(:,2));
+    end
     q=q-ea_LocalRepmat([xr(1),yr(1),0],[2*n,1]);
     dx=xr(2)-xr(1); dy=yr(2)-yr(1);
     q=q*diag([1/dx,1/dy,1]);
     q1=q(1:n,:); q2=q(n+1:end,:);
-else xs=0; ys=0; dx=0; dy=0; xr=0; yr=0;
+else
+    xs=0; ys=0; dx=0; dy=0; xr=0; yr=0;
 end
 
 %-------------------------------------------------------------------------
@@ -1255,7 +1332,8 @@ if ~cone
                 H1=plot3([p1(:,1),p2(:,1)]',[p1(:,2),p2(:,2)]',...
                     [p1(:,3),p2(:,3)]','LineWidth',lw);
             end
-        else H1=[];
+        else
+            H1=[];
         end
     else                                   % use LineWidthOrder
         ls=ea_LocalRepmat(cellstr(L),[ceil(n/size(L,1)),1]);
@@ -1273,11 +1351,17 @@ end
 
 %-------------------------------------------------------------------------
 % Scale
-if ~restore, axis tight, end
+if ~restore
+    axis tight;
+end
 ar=get(ax,'DataAspectRatio'); ar=sqrt(3)*ar/norm(ar);
 set(ax,'DataAspectRatioMode','manual');
-if xys, sf=1;
-else xr=get(ax,'xlim'); yr=get(ax,'ylim'); zr=get(ax,'zlim');
+if xys
+    sf=1;
+else
+    xr=get(ax,'xlim');
+    yr=get(ax,'ylim');
+    zr=get(ax,'zlim');
     sf=norm(diff([xr;yr;zr],1,2)./ar')/72;
 end
 
@@ -1289,7 +1373,11 @@ setappdata(ax,'Arrow3',[getappdata(ax,'Arrow3');p1,p2,c,w,h,ip,a]);
 %-------------------------------------------------------------------------
 % Arrowhead
 whip=sf*[w,h,ip];
-if xys, whip=whip*sqrt(2)/72; p1=q1; p2=q2; end
+if xys
+    whip=whip*sqrt(2)/72;
+    p1=q1;
+    p2=q2;
+end
 w=whip(:,1); h=whip(:,2); ip=whip(:,3);
 if cone                                            % cone plot
     delete(H1), H1=[];
@@ -1313,7 +1401,7 @@ x=r*cos(theta); y=r*sin(theta); z=r*Ones;
 G=surface(x/2,y/2,z); dar=diag(ar);
 X=get(G,'XData'); Y=get(G,'YData'); Z=get(G,'ZData');
 H2=Zeros; [j,k]=size(X);
-for i=1:n                           % translate, rotate, and scale
+for i=1:n   % translate, rotate, and scale
     H2(i)=copyobj(G,ax);
     xyz=[w(i)*X(:),w(i)*Y(:),h(i)*Z(:)]*[U(i,:);V(i,:);W(i,:)]*dar;
     x=reshape(xyz(:,1),j,k)+p2(i,1);
@@ -1332,7 +1420,7 @@ if any(ip>0)
     G=surface(x*ar(1)/2,y*ar(2)/2,z*ar(3)/2);
     X=get(G,'XData'); Y=get(G,'YData'); Z=get(G,'ZData');
     H3=zeros(n,1);
-    for i=1:n                                        % translate
+    for i=1:n   % translate
         if ip(i)>0
             H3(i)=copyobj(G,ax);
             x=p1(i,1)+X*ip(i); y=p1(i,2)+Y*ip(i); z=p1(i,3)+Z*ip(i);
@@ -1340,28 +1428,42 @@ if any(ip>0)
                 x,y,z,a(i),c(i,:),H3(i),m+1,m+1);
         end
     end, delete(G);
-else H3=[];
+else
+    H3=[];
 end
 
 %-------------------------------------------------------------------------
 % Finish
-if restore, xr=Xr; yr=Yr; zr=Zr;
-    if xys, set(ax,'DataAspectRatioMode','auto'); end
+if restore
+    xr=Xr;
+    yr=Yr;
+    zr=Zr;
+    if xys
+        set(ax,'DataAspectRatioMode','auto');
+    end
 else
     axis tight
     xr=get(ax,'xlim'); yr=get(ax,'ylim'); zr=get(ax,'zlim');
     set(ax,'nextplot','replace');
 end
 azel=get(ax,'view');
-if abs(azel(2))==90, renderer='ZBuffer'; else renderer='OpenGL'; c1=3; end
+if abs(azel(2))==90
+    renderer='ZBuffer';
+else
+    renderer='OpenGL'; c1=3;
+end
 set(fig,'Renderer',renderer);
 set(ax,'LineStyleOrder',L,'ColorOrder',C,'DefaultLineTag',LT,...
     'DefaultSurfaceTag',ST,'DefaultSurfaceEdgeColor',EC,...
     'xlim',xr,'ylim',yr,'zlim',zr,'clim',get(ax,'CLim'));
-if c1==3, set(ax,'CameraViewAngle',get(ax,'CameraViewAngle'),...
+if c1==3
+    set(ax,'CameraViewAngle',get(ax,'CameraViewAngle'),...
         'PlotBoxAspectRatio',get(ax,'PlotBoxAspectRatio'));
 end
-if nargout, hn=[H1(:);H2(:);H3(:)]; end
+if nargout
+    hn=[H1(:);H2(:);H3(:)];
+end
+
 
 %-------------------------------------------------------------------------
 % Local Functions
@@ -1380,7 +1482,7 @@ if flag, map=get(fig,'colormap');                  % update colors
     MagnitudeWarning=['Cannot perform magnitude coloring on lines ',...
         'that\nwere drawn with a single color, linestyle, and linewidth'];
     if length(H1)>1
-        for i=1:length(H1)                             % update line colors
+        for i=1:length(H1)  % update line colors
             x=get(H1(i),'xdata'); y=get(H1(i),'ydata'); z=get(H1(i),'zdata');
             if length(x)>2                               % multiple lines
                 warning('Arrow3:Magnitude',MagnitudeWarning), continue
@@ -1397,20 +1499,28 @@ set(ax,'ColorOrder',c);                            % update surfaces
 ColorOrder=[];
 if strcmp(get(ax,'tag'),'Arrow3ConePlot')
     H=ea_arrow3(p1,p2,'o' ,w,h,'cone',a);            % update cones
-else H=ea_arrow3(p1,p2,'o0',w,h,    ip,a);
-end, H=[H1(:);H(:)];
+else
+    H=ea_arrow3(p1,p2,'o0',w,h,ip,a);
+end
+H=[H1(:);H(:)];
 set(ax,'nextplot','replace');
+
 
 %-------------------------------------------------------------------------
 % SetSurface
 function ea_LocalSetSurface(xys,xs,ys,dx,dy,xr,yr,x,y,z,a,c,H,n,m)
 if xys
     x=x*dx+xr(1); y=y*dy+yr(1);
-    if xs, x=10.^x; end
-    if ys, y=10.^y; end
+    if xs
+        x=10.^x;
+    end
+    if ys
+        y=10.^y;
+    end
 end
 cd=zeros(n,m,3); cd(:,:,1)=c(1); cd(:,:,2)=c(2); cd(:,:,3)=c(3);
 set(H,'XData',x,'YData',y,'ZData',z,'CData',cd,'FaceAlpha',a);
+
 
 %-------------------------------------------------------------------------
 % ColorTable
@@ -1456,7 +1566,9 @@ if n, clf reset                                    % plot color table
         'DefaultAxesXTickLabel',[],'DefaultAxesYTickLabel',[],...
         'DefaultAxesXLim',[0,0.75],'DefaultAxesYLim',[0,0.75],...
         'DefaultRectangleEdgeColor','none');
-    for i=1:24, subplot(4,6,i); box on
+    for i=1:24
+        subplot(4,6,i)
+        box on;
         j=find(vc==c(i)); title(name{j});
         dark=ea_LocalBrighten(cn(j,:),-beta);
         light=ea_LocalBrighten(cn(j,:),beta);
@@ -1475,23 +1587,42 @@ if n, clf reset                                    % plot color table
     end
 end
 
+
 %-------------------------------------------------------------------------
 % ColorMap
 function [C,failed]=ea_LocalColorMap(c,vc,cn,beta)
 n=length(c); failed=0; C=zeros(n,3); i=1; j=1;
 while 1
-    if ~sum([vc,'_^']==c(i)), failed=1; break, end
-    if sum('_^'==c(i))
-        if i+1>n, failed=1; break, end
-        if ~sum(vc==c(i+1)), failed=1; break, end
-        cc=cn(vc==c(i+1),:); gamma=beta;
-        if c(i)=='_', gamma=-beta; end
-        C(j,:)=ea_LocalBrighten(cc,gamma); i=i+2;
-    else C(j,:)=cn(vc==c(i),:); i=i+1;
+    if ~sum([vc,'_^']==c(i))
+        failed=1;
+        break;
     end
-    if i>n, break, end, j=j+1;
+    if sum('_^'==c(i))
+        if i+1>n
+            failed=1;
+            break;
+        end
+        if ~sum(vc==c(i+1))
+            failed=1;
+            break;
+        end
+        cc=cn(vc==c(i+1),:); gamma=beta;
+        if c(i)=='_'
+            gamma=-beta;
+        end
+        C(j,:)=ea_LocalBrighten(cc,gamma); i=i+2;
+    else
+        C(j,:)=cn(vc==c(i),:); i=i+1;
+    end
+    if i>n
+        break;
+    end
+    j=j+1;
 end
-if n>j, C(j+1:n,:)=[]; end
+if n>j
+    C(j+1:n,:)=[];
+end
+
 
 %-------------------------------------------------------------------------
 % Brighten
@@ -1506,22 +1637,34 @@ else
     C=c.^((1-min(1-sqrt(eps),abs(beta)))^sign(beta));
 end
 
+
 %-------------------------------------------------------------------------
 % Repmat
 function B=ea_LocalRepmat(A,siz)
-if length(A)==1, B(prod(siz))=A; B(:)=A; B=reshape(B,siz);
-else [m,n]=size(A); mind=(1:m)'; nind=(1:n)';
-    mind=mind(:,ones(1,siz(1))); nind=nind(:,ones(1,siz(2)));
+if length(A)==1
+    B(prod(siz))=A;
+    B(:)=A;
+    B=reshape(B,siz);
+else
+    [m,n]=size(A);
+    mind=(1:m)';
+    nind=(1:n)';
+    mind=mind(:,ones(1,siz(1)));
+    nind=nind(:,ones(1,siz(2)));
     B=A(mind,nind);
 end
+
 
 %-------------------------------------------------------------------------
 % Interp
 function v=ea_LocalInterp(xmin,xmax,y,u)
 [m,n]=size(y); h=(xmax-xmin)/(m-1); p=length(u); v=zeros(p,n);
 k=min(max(1+floor((u-xmin)/h),1),m-1); s=(u-xmin)/h-k+1;
-for j=1:n, v(:,j)=y(k,j)+s.*(y(k+1,j)-y(k,j)); end
+for j=1:n
+    v(:,j)=y(k,j)+s.*(y(k+1,j)-y(k,j));
+end
 v(v<0)=0; v(v>1)=1;
+
 
 %-------------------------------------------------------------------------
 % Check for supported log scales
@@ -1529,39 +1672,69 @@ function [xs,ys,xys]=ea_LocalLogCheck(ax)
 xs=strcmp(get(ax,'xscale'),'log');
 ys=strcmp(get(ax,'yscale'),'log');
 zs=strcmp(get(ax,'zscale'),'log');
-if zs, error('Z log scale not supported'), end
-xys=xs+ys;
-if xys, azel=get(ax,'view');
-    if abs(azel(2))~=90, error('3D log plot not supported'), end
+if zs
+    error('Z log scale not supported');
 end
+xys=xs+ys;
+if xys
+    azel=get(ax,'view');
+    if abs(azel(2))~=90
+        error('3D log plot not supported');
+    end
+end
+
 
 %-------------------------------------------------------------------------
 % Generate valid value for color, linestyle and linewidth
 function [c,ls,lw]=LocalValidateCLSW(s)
-if nargin<1, c='k'; ls='-'; lw=0.5;
+if nargin<1
+    c='k';
+    ls='-';
+    lw=0.5;
 else
     % identify linestyle
-    if findstr(s,'--'), ls='--'; s=strrep(s,'--','');
-    elseif findstr(s,'-.'), ls='-.'; s=strrep(s,'-.','');
-    elseif findstr(s,'-'), ls='-'; s=strrep(s,'-','');
-    elseif findstr(s,':'), ls=':'; s=strrep(s,':','');
-    elseif findstr(s,'*'), ls='*'; s=strrep(s,'*','');
-    else ls='-';
+    if strfind(s,'--')
+        ls='--';
+        s=strrep(s,'--','');
+    elseif strfind(s,'-.')
+        ls='-.';
+        s=strrep(s,'-.','');
+    elseif strfind(s,'-')
+        ls='-';
+        s=strrep(s,'-','');
+    elseif strfind(s,':')
+        ls=':';
+        s=strrep(s,':','');
+    elseif strfind(s,'*')
+        ls='*';
+        s=strrep(s,'*','');
+    else
+        ls='-';
     end
 
     % identify linewidth
     tmp=double(s);
     tmp=find(tmp>45 & tmp<58);
-    if length(tmp)
-        if any(s(tmp)=='/'), lw='/'; else lw=str2double(s(tmp)); end
+    if ~isempty(tmp)
+        if any(s(tmp)=='/')
+            lw='/';
+        else
+            lw=str2double(s(tmp));
+        end
         s(tmp)='';
-    else lw=0.5;
+    else
+        lw=0.5;
     end
 
     % identify color
-    if length(s), s=lower(s);
-        if length(s)>1, c=s(1:2);
-        else c=s(1); end
-    else c='k';
+    if ~isempty(s)
+        s=lower(s);
+        if length(s)>1
+            c=s(1:2);
+        else
+            c=s(1);
+        end
+    else
+        c='k';
     end
 end

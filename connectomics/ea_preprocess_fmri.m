@@ -1,6 +1,5 @@
 function ea_preprocess_fmri(options)
 
-
 directory=[options.root,options.patientname,filesep];
 
 V=spm_vol([directory,options.prefs.rest]);
@@ -9,7 +8,7 @@ signallength=length(V);
 %% run sequence of proxyfunctions (below):
 ea_realign_fmri(signallength,options); % realign fMRI
 
-ea_newseg(directory,options.prefs.prenii_unnormalized,0,options); % Segment anat
+ea_newseg(directory,options.prefs.prenii_unnormalized,0,options,1); % Segment anat
 
 ea_coreg_pre2fmri(options); % register pre 2 fmri (for timecourse-extraction).
 
@@ -19,15 +18,13 @@ ea_smooth_fmri(signallength,options); % slightly smooth fMRI data
 function ea_realign_fmri(signallength,options)
 %% realign fmri.
 directory=[options.root,options.patientname,filesep];
-if ~exist([directory,'r',options.prefs.rest],'file');
+if ~exist([directory,'r',options.prefs.rest],'file')
+
+    restbackup = ea_niifileparts([directory,options.prefs.rest]);
+    copyfile([directory,options.prefs.rest], restbackup);
 
     disp('Realignment of rs-fMRI data...');
-    filetimepts=cell(signallength,1);
-    for i = 1:signallength
-        filetimepts{i}=[directory,options.prefs.rest,',',num2str(i)];
-    end
-
-
+    filetimepts = ea_appendVolNum([directory,options.prefs.rest], 1:signallength);
     matlabbatch{1}.spm.spatial.realign.estwrite.data = {filetimepts};
     matlabbatch{1}.spm.spatial.realign.estwrite.eoptions.quality = 1;
     matlabbatch{1}.spm.spatial.realign.estwrite.eoptions.sep = 4;
@@ -43,66 +40,100 @@ if ~exist([directory,'r',options.prefs.rest],'file');
     matlabbatch{1}.spm.spatial.realign.estwrite.roptions.prefix = 'r';
     spm_jobman('run',{matlabbatch});
     clear matlabbatch;
-    delete([directory,'mean',options.prefs.rest]);
     disp('Done.');
+%    ea_reslice_nii([directory, options.prefs.rest], [directory, 'r',options.prefs.rest], [1,1,1], 0, 0, 1, [], [],0)
+    movefile(restbackup, [directory, options.prefs.rest]);
 end
 
 
 function ea_coreg_pre2fmri(options)
 directory=[options.root,options.patientname,filesep];
-[~,rf]=fileparts(options.prefs.rest);
-if ~exist([directory,'rr',rf,options.prefs.prenii_unnormalized],'file')
-    %% coreg mprage to fMRI (for GM-map)
+% Disable Hybrid coregistration
+coregmethod = options.coregmr.method;
+options.coregmr.method = strrep(coregmethod, 'Hybrid SPM & ', '');
 
-    copyfile([directory,options.prefs.prenii_unnormalized],[directory,'k',options.prefs.prenii_unnormalized])
-    copyfile([directory,'c1',options.prefs.prenii_unnormalized],[directory,'kc1',options.prefs.prenii_unnormalized]) %% use copies for coregistration to leave original files untouched.
-    copyfile([directory,'c2',options.prefs.prenii_unnormalized],[directory,'kc2',options.prefs.prenii_unnormalized]) %% use copies for coregistration to leave original files untouched.
-    copyfile([directory,'c3',options.prefs.prenii_unnormalized],[directory,'kc3',options.prefs.prenii_unnormalized]) %% use copies for coregistration to leave original files untouched.
+% Re-calculate mean re-aligned image if not found
+if ~exist([directory, 'mean', options.prefs.rest], 'file')
+    ea_meanimage([directory, 'r', options.prefs.rest], ['mean', options.prefs.rest]);
+end
 
-    matlabbatch{1}.spm.spatial.coreg.estwrite.ref = {[directory,'r',options.prefs.rest,',1']};
-    matlabbatch{1}.spm.spatial.coreg.estwrite.source = {[directory,'k',options.prefs.prenii_unnormalized,',1']};
-    matlabbatch{1}.spm.spatial.coreg.estwrite.other = {[directory,'kc1',options.prefs.prenii_unnormalized,',1'];
-        [directory,'kc2',options.prefs.prenii_unnormalized,',1'];
-        [directory,'kc3',options.prefs.prenii_unnormalized,',1']
-        };
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.cost_fun = 'nmi';
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.sep = [4 2];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.tol = [0.02 0.02 0.02 0.001 0.001 0.001 0.01 0.01 0.01 0.001 0.001 0.001];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.fwhm = [7 7];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.interp = 1;
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.wrap = [0 0 0];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.mask = 0;
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.prefix = ['rr',rf];
+if isfield(options, 'overwriteapproved') && options.overwriteapproved
+    overwrite = 1;
+else
+    overwrite = 0;
+end
 
-    try
-        jobs{1}=matlabbatch;
-        spm_jobman('run',jobs);
+anatfname=ea_stripext(options.prefs.prenii_unnormalized);
+refname=['r',ea_stripext([options.prefs.rest])];
+reference=['mean',options.prefs.rest]; % okay here to not use the hd version of the image since this is about the csf/wm masks.
+
+% For this pair of approved coregistations, find out which method to use -
+% irrespective of the current selection in coregmethod.
+coregmethodsused=load([directory,'ea_coregmrmethod_applied.mat']);
+fn=fieldnames(coregmethodsused);
+for field=1:length(fn)
+    if contains(fn{field},ea_stripext(options.prefs.rest))
+        if ~isempty(coregmethodsused.(fn{field}))
+            disp(['For this pair of coregistrations, the user specifically approved the ',coregmethodsused.(fn{field}),' method, so we will overwrite the current global options and use this transform.']);
+            options.coregmr.method=coregmethodsused.(fn{field});
+        end
+        break
+    end
+end
+
+% Disable Hybrid coregistration
+coregmethod = strrep(options.coregmr.method, 'Hybrid SPM & ', '');
+options.coregmr.method = coregmethod;
+
+% Check if the corresponding transform already exists
+xfm = [anatfname, '2', refname, '_', lower(coregmethod), '\d*\.(mat|h5)$'];
+transform = ea_regexpdir(directory, xfm, 0);
+
+if numel(transform) == 0 || overwrite
+    if numel(transform) == 0
+        warning('Transformation not found! Running coregistration now!');
     end
 
-    clear matlabbatch jobs;
-    % cleanup:
-
-    movefile([directory,'rr',rf,'k',options.prefs.prenii_unnormalized],[directory,'rr',rf,options.prefs.prenii_unnormalized],'f')
-    movefile([directory,'rr',rf,'kc1',options.prefs.prenii_unnormalized],[directory,'rr',rf,'c1',options.prefs.prenii_unnormalized],'f') %% restore original files..
-    movefile([directory,'rr',rf,'kc2',options.prefs.prenii_unnormalized],[directory,'rr',rf,'c2',options.prefs.prenii_unnormalized],'f') %% restore original files..
-    movefile([directory,'rr',rf,'kc3',options.prefs.prenii_unnormalized],[directory,'rr',rf,'c3',options.prefs.prenii_unnormalized],'f') %% restore original files..
-
-    movefile([directory,'k',options.prefs.prenii_unnormalized],[directory,options.prefs.prenii_unnormalized])
-    movefile([directory,'kc1',options.prefs.prenii_unnormalized],[directory,'c1',options.prefs.prenii_unnormalized]) %% restore original files..
-    movefile([directory,'kc2',options.prefs.prenii_unnormalized],[directory,'c2',options.prefs.prenii_unnormalized]) %% restore original files..
-    movefile([directory,'kc3',options.prefs.prenii_unnormalized],[directory,'c3',options.prefs.prenii_unnormalized]) %% restore original files..
+    transform = ea_coreg2images(options,[directory,options.prefs.prenii_unnormalized],...
+        [directory,reference],...
+        [directory,'r',ea_stripext(options.prefs.rest),'_',options.prefs.prenii_unnormalized],...
+        [],1,[],1);
+    % Fix transformation names, replace 'mean' by 'r' for fMRI
+    if strcmp(reference, ['mean', options.prefs.rest])
+        cellfun(@(f) movefile(f, strrep(f, 'mean', 'r')), transform);
+        transform = strrep(transform, 'mean', 'r');
+    end
+    transform = transform{1}; % Forward transformation
+else
+    if numel(transform) > 1
+        warning(['Multiple transformations of the same type found! ' ...
+            'Will use the last one:\n%s'], transform{end});
+    end
+    transform = transform{end};
 end
+
+ea_apply_coregistration([directory,'mean',options.prefs.rest], ...
+    [directory,options.prefs.prenii_unnormalized], ...
+    [directory,'r',ea_stripext(options.prefs.rest),'_',options.prefs.prenii_unnormalized], ...
+    transform, 'linear');
+
+% segmented anat images registered to mean rest image
+for i=1:3
+    ea_apply_coregistration([directory,'mean',options.prefs.rest], ...
+        [directory,'c',num2str(i),options.prefs.prenii_unnormalized], ...
+        [directory,'r',ea_stripext(options.prefs.rest),'_c',num2str(i),options.prefs.prenii_unnormalized], ...
+        transform, 'linear');
+end
+
+% % Fix transformation names, replace 'mean' by 'r'
+% cellfun(@(f) movefile(f, strrep(f, 'mean', 'r')), transform);
 
 
 function ea_smooth_fmri(signallength,options)
 directory=[options.root,options.patientname,filesep];
+
+filetimepts = ea_appendVolNum([directory,'r',options.prefs.rest], 1:signallength);
 if ~exist([directory,'sr',options.prefs.rest],'file')
-    filetimepts=cell(signallength,1);
-    for i = 1:signallength
-        filetimepts{i}=[directory,'r',options.prefs.rest,',',num2str(i)];
-    end
-
-
     matlabbatch{1}.spm.spatial.smooth.data = filetimepts;
     matlabbatch{1}.spm.spatial.smooth.fwhm = [6 6 6];
     matlabbatch{1}.spm.spatial.smooth.dtype = 0;

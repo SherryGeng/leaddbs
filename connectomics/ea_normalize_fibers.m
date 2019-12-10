@@ -10,14 +10,7 @@ directory=[options.root,options.patientname,filesep];
 try
 	if ~exist([directory,ftrfname,'.trk'],'file')
         fprintf('\nExporting unnormalized fibers to TrackVis...\n');
-        dnii=ea_load_nii([directory,options.prefs.b0]);
-
-        specs.origin=[0,0,0];
-        specs.dim=size(dnii.img);
-        specs.vox=dnii.voxsize;
-        specs.affine=dnii.mat;
-
-        ea_ftr2trk(ftrfname,directory,specs); % export normalized ftr to .trk
+        ea_b0ftr2trk([directory,ftrfname,'.mat'],[directory,options.prefs.b0]);
         disp('Done.');
 	end
 end
@@ -35,7 +28,7 @@ if vizz
     [xx,yy,zz]=ind2sub(size(b0.img),find(b0.img>max(b0.img(:))/7));
     plot3(xx(1:10:end),yy(1:10:end),zz(1:10:end),'.','color',[0.9598    0.9218    0.0948]);
     axis vis3d off tight equal;
-    title("b0 space")
+    title('b0 space');
     hold on
 
     % plot anat, voxel space
@@ -45,7 +38,7 @@ if vizz
     [xx,yy,zz]=ind2sub(size(anat.img),find(anat.img>max(anat.img(:))/3));
     plot3(xx(1:1000:end),yy(1:1000:end),zz(1:1000:end),'.','color',[0.9598    0.9218    0.0948]);
     axis vis3d off tight equal;
-    title("anat space")
+    title('anat space');
     hold on
 
     % plot MNI, world space
@@ -56,7 +49,7 @@ if vizz
     XYZ_mm=[xx,yy,zz,ones(length(xx),1)]*mni.mat';
     plot3(XYZ_mm(1:10000:end,1),XYZ_mm(1:10000:end,2),XYZ_mm(1:10000:end,3),'.','color',[0.9598    0.9218    0.0948]);
     axis vis3d off tight equal;
-    title("MNI space")
+    title('MNI space');
     hold on
 end
 
@@ -83,8 +76,16 @@ fprintf('\nNormalizing fibers...\n');
 fprintf('\nMapping from b0 to anat...\n');
 [~, mov] = fileparts(options.prefs.b0);
 [~, fix] = fileparts(options.prefs.prenii_unnormalized);
-if isempty(dir([directory, mov, '2', fix, '_*.mat']))
+coregmethod = strrep(options.coregmr.method, 'Hybrid SPM & ', '');
+options.coregmr.method = coregmethod;
+xfm = [mov, '2', fix, '_', lower(coregmethod), '\d*\.(mat|h5)$'];
+transform = ea_regexpdir(directory, xfm, 0);
+
+if numel(transform) == 0
+    warning('Specified transformation not found! Running coregistration now!');
+    ea_backuprestore(refb0);
     ea_coreg2images(options,refb0,refanat,[options.root,options.patientname,filesep,'tmp.nii'],{},1);
+    ea_delete([options.root,options.patientname,filesep,'tmp.nii']);
 end
 [~, wfibsvox_anat] = ea_map_coords(fibers(:,1:3)', ...
                                    refb0, ...
@@ -92,6 +93,9 @@ end
                                    refanat, ...
                                    options.coregmr.method);
 wfibsvox_anat = wfibsvox_anat';
+ea_savefibertracts([directory,ftrfname,'_anat.mat'],[wfibsvox_anat,fibers(:,4)],idx,'vox');
+fprintf('\nGenerating trk in anat space...\n');
+ea_ftr2trk([directory,ftrfname,'_anat.mat'],refanat);
 
 % plot fibers in anat space
 if vizz
@@ -142,35 +146,25 @@ if vizz
 end
 
 %% export fibers
-wfibsmm_mni=[wfibsmm_mni,fibers(:,4)];
-wfibsvox_mni=[wfibsvox_mni,fibers(:,4)];
 [~,ftrbase]=fileparts(options.prefs.FTR_normalized);
 if ~exist([directory,'connectomes',filesep,'dMRI'],'file')
     mkdir([directory,'connectomes',filesep,'dMRI']);
 end
-ea_savefibertracts([directory,'connectomes',filesep,'dMRI',filesep,ftrbase,'.mat'],wfibsmm_mni,idx,'mm');
-ea_savefibertracts([directory,'connectomes',filesep,'dMRI',filesep,ftrbase,'_vox.mat'],wfibsvox_mni,idx,'vox',mniaffine);
+ea_savefibertracts([directory,'connectomes',filesep,'dMRI',filesep,ftrbase,'.mat'],[wfibsmm_mni,fibers(:,4)],idx,'mm');
+ea_savefibertracts([directory,'connectomes',filesep,'dMRI',filesep,ftrbase,'_vox.mat'],[wfibsvox_mni,fibers(:,4)],idx,'vox');
 
 %% create normalized trackvis version
-try
-    fprintf('\nExporting normalized fibers to TrackVis...\n');
-    dnii=ea_load_nii(refnorm);
+fprintf('\nExporting normalized fibers to TrackVis...\n');
 
-    specs.origin=[0,0,0];
-    specs.dim=size(dnii.img);
-    specs.vox=dnii.voxsize;
-    specs.affine=dnii.mat;
-
-    [~,ftrfname]=fileparts(options.prefs.FTR_normalized);
-    ea_ftr2trk(ftrfname,[directory,'connectomes',filesep,'dMRI',filesep],specs); % export normalized ftr to .trk
-    disp('Done.');
-end
+[~,ftrfname]=fileparts(options.prefs.FTR_normalized);
+ea_ftr2trk([directory,'connectomes',filesep,'dMRI',filesep,ftrfname]); % export normalized ftr to .trk
+disp('Done.');
 
 %% add methods dump:
 cits={
-    'Horn, A., Ostwald, D., Reisert, M., & Blankenburg, F. (2014). The structural-functional connectome and the default mode network of the human brain. NeuroImage, 102 Pt 1, 142?151. http://doi.org/10.1016/j.neuroimage.2013.09.069'
-    'Horn, A., & Kühn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127?135. http://doi.org/10.1016/j.neuroimage.2014.12.002'
-    'Horn, A., & Blankenburg, F. (2016). Toward a standardized structural-functional group connectome in MNI space. NeuroImage, 124(Pt A), 310?322. http://doi.org/10.1016/j.neuroimage.2015.08.048'
+    'Horn, A., Ostwald, D., Reisert, M., & Blankenburg, F. (2014). The structural-functional connectome and the default mode network of the human brain. NeuroImage, 102 Pt 1, 142-151. http://doi.org/10.1016/j.neuroimage.2013.09.069'
+    'Horn, A., & Kuehn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127-135. http://doi.org/10.1016/j.neuroimage.2014.12.002'
+    'Horn, A., & Blankenburg, F. (2016). Toward a standardized structural-functional group connectome in MNI space. NeuroImage, 124(Pt A), 310-322. http://doi.org/10.1016/j.neuroimage.2015.08.048'
     };
 ea_methods(options,['The whole-brain fiber set was normalized into standard-stereotactic space following the approach described in (Horn 2014, Horn 2016) as ',...
     ' implemented in Lead-DBS software (Horn 2015; www.lead-dbs.org).'],...

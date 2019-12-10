@@ -4,7 +4,7 @@ function varargout=ea_ft_mesotracking_reisert(options)
 % Andreas Horn
 
 if ischar(options) % return name of method.
-    varargout{1}='Mesoscopic Fibertracking (Reisert et al. 2014)';
+    varargout{1}='Mesoscopic Fibertracking (Konopleva et al. 2018)';
     varargout{2}={'SPM8','SPM12'};
     return
 end
@@ -128,41 +128,24 @@ end
 %% mesoft part goes here
 [~,dfn]=fileparts(options.prefs.dti);
 ea_delete([directory,dfn,'_FTR.mat']);
-% addpath(genpath('/media/Data/MATLAB/release'));
-% addpath(genpath('/media/Data/MATLAB/marco_reisert'));
-% addpath(genpath('/media/Data/MATLAB/dti_tools'));
 
-%ea_prepare_dti(options);
 
-% mesoGT_tool('loadData','nii',[directory,options.prefs.dti],{[directory,options.prefs.bvec],[directory,options.prefs.bval],...
-%    },[directory,'trackingmask.nii'],0.5);
+init_mesoft;
 mesoGT_tool('loadData','nii',[directory,options.prefs.dti],{[directory,options.prefs.bvec],[directory,options.prefs.bval],...
      },{[directory,'gmmask.nii'],[directory,'trackingmask.nii']},[128,128]);
-
 mesoGT_tool('reset');
 mesoGT_tool('start');
 
-movefile([directory,dfn,'_accum_FTR.mat'],[directory,options.prefs.FTR_unnormalized]);
+movefile([directory,dfn,'_FTR.mat'],[directory,options.prefs.FTR_unnormalized]);
 delete(findobj('tag','fiberGT_main'))
 
-
 %% export .trk copy for trackvis visualization
-dnii=nifti([directory,options.prefs.b0]);
-niisize=size(dnii.dat); % get dimensions of reference template.
-specs.origin=[0,0,0];
-specs.dim=niisize;
-specs.affine=dnii.mat;
-
-[~,ftrfname]=fileparts(options.prefs.FTR_unnormalized);
-ea_ftr2trk(ftrfname,directory,specs); % export unnormalized ftr to .trk
+ea_b0ftr2trk([directory,options.prefs.FTR_unnormalized],[directory,options.prefs.b0]); % export unnormalized ftr to .trk
 disp('Done.');
 
-
-
 %% add methods dump:
-cits={
-    'Reisert, M., Kiselev, V. G., Dihtal, B., Kellner, E., & Novikov, D. S. (2014). MesoFT: Unifying Diffusion Modelling and Fiber Tracking. In Medical Image Computing and Computer-Assisted Intervention ? MICCAI 2014 (Vol. 8675, pp. 201?208). Cham: Springer International Publishing. http://doi.org/10.1007/978-3-319-10443-0_26'
+cits={'Konopleva, L., Ilyasov, K. A., Skibbe, H., Kiselev, V. G., Kellner, E., Dhital, B., & Reisert, M. (2018). Modelfree global tractography. NeuroImage. http://doi.org/10.1016/j.neuroimage.2018.03.058'
     'Ashburner, J., & Friston, K. J. (2005). Unified segmentation., 26(3), 839?851. http://doi.org/10.1016/j.neuroimage.2005.02.018'
     };
-ea_methods(options,['A whole-brain fiber-set was estimated based using a model-free implementation of the Meso-tracking approach (Reisert 2014) using standard parameters.',...
+ea_methods(options,['A whole-brain fiber-set was estimated based using a model-free implementation of the Meso-tracking approach (Konopleva et al. 2018) using standard parameters.',...
     ' This was done within a white-matter mask that was estimated on the anatomical scan using the Unified Segmentation approach (Ashburner 2005) as implemented in ',spm('ver'),' and linearly co-registered to the b0-weighted series.'],cits);

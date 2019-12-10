@@ -1,13 +1,13 @@
 function X=ea_genfeaturesfromvta(uipatdirs, stimname, atlname)
 
-
 %ea_run_mapper(uipatdirs, stimname);
 options.prefs=ea_prefs('');
 if exist('atlname','var')
-    
+
     copyfile([ea_space([],'labeling'),atlname,'.nii'],[tempdir,'label.nii']);
     ea_conformspaceto(fullfile(ea_getearoot,'predict','spaces','222.nii'),[tempdir,'label.nii'],0);
     nii=ea_load_nii([tempdir,'label.nii']);
+    ea_delete([tempdir,'label.nii']);
     cnt=1;
     for parc=unique(nii.img(nii.img>0))'
         allfeatsix{cnt}=find(nii.img==parc);
@@ -46,7 +46,7 @@ for pt=1:length(uipatdirs)
           St(pt,c)=mean(strucnii.img(allfeatsix{c}));
        end
        X(pt,:)=[St(pt,:),Fu(pt,:)];
-        
+
     else
         %   X(pt,:)=[cell2mat(acnt),strucnii.img(allfeatsix)',funcnii.img(allfeatsix)'];
         X(pt,:)=[strucnii.img(allfeatsix)',funcnii.img(allfeatsix)'];
@@ -54,13 +54,9 @@ for pt=1:length(uipatdirs)
 end
 
 
-
-
-
 function options=ea_getrootptname(folder,options)
 [options.root,options.patientname]=fileparts(folder);
 options.root=[options.root,filesep];
-
 
 
 function ea_run_mapper(uipatdirs, stimname)
@@ -76,18 +72,17 @@ options.lcm.struc.connectome = 'HCP842_1mm (Yeh 2011)';
 options.lcm.func.connectome = 'GSP 1000 Groupmatrix (Yeo 2011) > Full Set (Yeo 2011)';
 options.lcm.seeds = stimname;
 
-                 
+options.leadprod = 'mapper';
+
 allpatdirs=options.uipatdirs;
 for pat=1:length(allpatdirs)
-% set subject specific options:
-options.root=[fileparts(allpatdirs{pat}),filesep];
-[~,thispatdir]=fileparts(allpatdirs{pat});
-options.patientname=thispatdir;
-options.uipatdirs=allpatdirs{pat};
-ea_run('run',options);
+    % set subject specific options:
+    options.root=[fileparts(allpatdirs{pat}),filesep];
+    [~,thispatdir]=fileparts(allpatdirs{pat});
+    options.patientname=thispatdir;
+    options.uipatdirs=allpatdirs{pat};
+    ea_run('run',options);
 end
-
-
 
 
 function options=getoptslocal
@@ -97,7 +92,7 @@ options.refinesteps = 0;
 options.tra_stdfactor = 0.9;
 options.cor_stdfactor = 1;
 options.earoot = ea_getearoot;
-options.dicomimp = 0;
+options.dicomimp.do = 0;
 options.normalize.do = 0;
 options.normalize.method = [];
 options.normalize.check = 0;

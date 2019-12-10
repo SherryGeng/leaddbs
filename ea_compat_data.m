@@ -41,3 +41,13 @@ if strcmp(ea_getspace,'MNI_ICBM_2009b_NLIN_ASYM')
         try movefile( [ea_space,'electrode_models'],[ea_getearoot,'templates']); end
     end
 end
+
+if ~exist([ea_getearoot,'spacedefinitions'],'dir')
+    prefs=ea_prefs;
+    if exist([prefs.lc.datadir,'spacedefinitions'], 'dir')
+        try movefile([prefs.lc.datadir,'spacedefinitions'], [ea_getearoot,'templates']); end
+    elseif exist([ea_getearoot,'spacedefinitions'], 'dir')
+        try movefile([ea_getearoot,'spacedefinitions'], [ea_getearoot,'templates']); end
+    end
+end
+

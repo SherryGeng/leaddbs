@@ -6,6 +6,10 @@ function ea_crop_nii_bb(varargin)
 % Copyright (C) 2015 Charite University Medicine Berlin, Movement Disorders Unit
 % Andreas Horn
 
+% Add 'spm_write_sn' path to MATLAB search path
+oldpath = path;
+path(oldpath, fullfile(fileparts(which('spm')), 'toolbox', 'OldNorm'));
+
 filename = varargin{1};
 
 if strcmp(filename(end-2:end), '.gz')
@@ -43,7 +47,7 @@ V = spm_vol(filename);
 [~,vox] = ea_spm_get_bbox(V, 'nz');
 
 if any(vox<0)
-   ea_reslice_nii(filename,filename,abs(vox),0); 
+   ea_reslice_nii(filename,filename,abs(vox),0);
    V = spm_vol(filename);
    [~,vox] = ea_spm_get_bbox(V, 0);
 end

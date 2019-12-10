@@ -1,13 +1,17 @@
 function ea_setplanes(xx,yy,zz,options)
 
 H = findall(0,'type','figure');
-resultfig = H(~cellfun(@isempty,strfind({H(:).Name},{'Electrode-Scene'})));
+resultfig = H(contains({H(:).Name},{'Electrode-Scene'}));
+resultfig = resultfig(1); % take the first if there are many.
 togglestates=getappdata(resultfig,'togglestates');
-togglestates.xyzmm=[xx,yy,zz];
+setXYZ=[xx,yy,zz];
+togglestates.xyztoggles=~isnan(setXYZ);
+setXYZ(~togglestates.xyztoggles)=togglestates.xyzmm(~togglestates.xyztoggles);
+togglestates.xyzmm=setXYZ;
 togglestates.refreshview=1;
 if ~exist('options','var')
     options=struct;
 end
-ea_anatomyslices(gcf,...
-    togglestates,...
-    options,[]);
+setappdata(resultfig,'togglestates',togglestates);
+
+ea_anatomyslices(resultfig, togglestates, options, []);

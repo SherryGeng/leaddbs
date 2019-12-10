@@ -13,11 +13,12 @@ directory=[options.root,options.patientname,filesep];
 
 for coregfi=2:length(presentfiles)
     if ~ea_coreglocked(options,presentfiles{coregfi}) % file has already been locked and approved by used
+        ea_backuprestore([directory,presentfiles{coregfi}]);
         ea_coreg2images(options,[directory,presentfiles{coregfi}],[directory,presentfiles{1}],[directory,presentfiles{coregfi}]);
 
         % reslice images if needed
-        V1=ea_open_vol([directory,presentfiles{1}]);
-        V2=ea_open_vol([directory,presentfiles{coregfi}]);
+        V1 = ea_open_vol([directory,presentfiles{1}]);
+        V2 = ea_open_vol([directory,presentfiles{coregfi}]);
         if ~isequal(V1.mat,V2.mat)
             ea_conformspaceto([directory,presentfiles{1}],[directory,presentfiles{coregfi}],1);
         end
@@ -80,18 +81,3 @@ bm.img=c1.img+c2.img+c3.img;
 bm.fname=[directory,'brainmask.nii'];
 bm.img=bm.img>0.5;
 spm_write_vol(bm,bm.img);
-
-
-function ea_maskimg(options,file,prefix)
-directory=[options.root,options.patientname,filesep];
-if ~exist([directory,'brainmask.nii'],'file')
-	ea_genbrainmask(options);
-end
-[pth,fn,ext]=fileparts(file);
-if ~exist([pth,filesep,prefix,fn,ext],'file')
-    nii=ea_load_nii(file);
-    bm=ea_load_nii([directory,'brainmask.nii']);
-    nii.img=nii.img.*double(bm.img);
-    nii.fname=[pth,filesep,prefix,fn,ext];
-    spm_write_vol(nii,nii.img);
-end

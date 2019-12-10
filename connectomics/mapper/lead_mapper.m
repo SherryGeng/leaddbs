@@ -22,7 +22,7 @@ function varargout = lead_mapper(varargin)
 
 % Edit the above text to modify the response to help lead_mapper
 
-% Last Modified by GUIDE v2.5 28-Oct-2016 09:59:23
+% Last Modified by GUIDE v2.5 11-Dec-2017 14:53:40
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -54,17 +54,17 @@ function lead_mapper_OpeningFcn(hObject, eventdata, handles, varargin)
 
 
 earoot=ea_getearoot;
-im=imread([earoot,'icons',filesep,'logo_lead_connectome.png']);
+im=imread([earoot,'icons',filesep,'logo_lead_connectome_mapper.png']);
 image(im);
 axes(handles.logoaxes);
 axis off;
 axis equal;
-set(handles.leadfigure,'name','Lead-Connectome Mapper','color','w');
+set(handles.leadfigure,'name','Lead Connectome Mapper','color','w');
 % homedir=ea_gethome;
 %setappdata(handles.leadfigure,'uipatdir',{homedir(1:end-1)});
 
 % add recent patients...
-ea_initrecentpatients(handles);
+ea_initrecentpatients(handles, 'patients');
 
 ea_processguiargs(handles,varargin)
 
@@ -205,21 +205,28 @@ try % finally use last patient parent dir if set.
     load([earoot,'ea_recentpatients.mat']);
     p=fileparts(fullrpts{1});
 end
-
-[seeds,path]=uigetfile({'*.nii','NIfTI';'*.txt','Text';'*.nii.gz','NIfTI'},'Please choose seed definition(s)...','MultiSelect','on');
-
-if iscell(seeds)
-    set(hObject,'String',['Multiple (',num2str(length(seeds)),')']);
-else
-    set(hObject,'String',[seeds]);
-    seeds={seeds};
+seeddef=get(handles.seeddefpopup,'String');
+switch seeddef{get(handles.seeddefpopup,'Value')}
+    case 'Manually choose seeds'
+        [seeds,path]=uigetfile({'*'},'Please choose seed definition(s)...','MultiSelect','on');
+    case 'Manually choose parcellation'
+        [seeds,path]=uigetfile({'*'},'Please choose parcellation...',ea_space([],'labeling'),'MultiSelect','off');
 end
 
-for s=1:length(seeds)
-   seeds{s}=fullfile(path,seeds{s});
-end
+if ischar(path) % path is 0 if the user clicks Cancel or close the window
+    if iscell(seeds)
+        set(hObject,'String',['Multiple (',num2str(length(seeds)),')']);
+    elseif ischar(seeds)
+        set(hObject,'String',seeds);
+        seeds={seeds};
+    end
 
-setappdata(hObject,'seeds',seeds);
+    for s=1:length(seeds)
+        seeds{s}=fullfile(path,seeds{s});
+    end
+
+    setappdata(hObject,'seeds',seeds);
+end
 
 
 % --- Executes on button press in run_button.
@@ -231,10 +238,12 @@ function run_button_Callback(hObject, eventdata, handles)
 leadfigure=handles.leadfigure;
 ea_busyaction('on',leadfigure,'mapper');
 
-
 options=ea_handles2options(handles);
 options.uivatdirs=getappdata(handles.leadfigure,'uipatdir');
 options.uipatdirs={''};
+
+options.leadprod = 'mapper';
+
 ea_run('run',options);
 
 ea_busyaction('off',leadfigure,'mapper');
@@ -252,6 +261,9 @@ ea_busyaction('on',leadfigure,'mapper');
 options=ea_handles2options(handles);
 options.uivatdirs=getappdata(handles.leadfigure,'uipatdir');
 options.uipatdirs={''};
+
+options.leadprod = 'mapper';
+
 ea_run('export',options);
 
 ea_busyaction('off',leadfigure,'mapper');
@@ -325,8 +337,10 @@ else
     seedbase='';
 end
 odir=uigetdir(seedbase,'Choose output location');
-setappdata(hObject,'odir',[odir,filesep]);
-set(hObject,'String',odir);
+if ischar(odir)
+    setappdata(hObject,'odir',[odir,filesep]);
+    set(hObject,'String',odir);
+end
 
 
 % --- Executes on selection change in strucexportspace.
@@ -358,9 +372,11 @@ function omaskbutton_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-omask=uigetfile({'*.nii';'*.nii.gz'},'Choose output location');
-setappdata(hObject,'omask',[omask]);
-set(hObject,'String',omask);
+[omask, path] = uigetfile({'*.nii';'*.nii.gz'},'Choose output location');
+if ischar(path)
+    setappdata(hObject,'omask',omask);
+    set(hObject,'String',omask);
+end
 
 
 % --- Executes on button press in patdir_choosebox.
@@ -382,7 +398,7 @@ function recentpts_Callback(hObject, eventdata, handles)
 % Hints: contents = cellstr(get(hObject,'String')) returns recentpts contents as cell array
 %        contents{get(hObject,'Value')} returns selected item from recentpts
 ea_busyaction('on',handles.leadfigure,'mapper');
-ea_rcpatientscallback(handles);
+ea_rcpatientscallback(handles, 'patients');
 ea_busyaction('off',handles.leadfigure,'mapper');
 
 
@@ -412,11 +428,15 @@ str=get(hObject,'String');
 if iscell(str)
     str=str{get(hObject,'Value')};
 end
-if strcmp(str,'Manually choose seeds')
+if strcmp(str, 'Manually choose seeds')
    set(handles.seedbutton,'enable','on');
+   set(handles.seedbutton,'String','Choose seeds...');
+elseif strcmp(str, 'Manually choose parcellation')
+   set(handles.seedbutton,'enable','on');
+   set(handles.seedbutton,'String','Choose parcellation...');
 else
    set(handles.seedbutton,'enable','off');
-   set(handles.seedbutton,'String','Choose seeds...');
+   set(handles.seedbutton,'String','Choose seeds/parcellation...');
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -430,3 +450,11 @@ function seeddefpopup_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+% --- Executes on button press in openpatientdir.
+function openpatientdir_Callback(hObject, eventdata, handles)
+% hObject    handle to openpatientdir (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+ea_openpatdir(handles);

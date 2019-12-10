@@ -27,7 +27,8 @@ if options.lc.struc.compute_CM
     if ~exist(expfolder,'dir')
         mkdir(expfolder);
     end
-    if ~exist([expfolder,'DTI_CM.mat'],'file')
+    if ~exist([expfolder,'DTI_CM.mat'],'file') || ...
+       (isfield(options, 'overwriteapproved') && options.overwriteapproved)
         if ~exist([options.root,options.patientname,filesep,options.prefs.FTR_unnormalized],'file') % fibertracking has not been performed.
             warning('Fibertracking has not been done yet. Will do so before estimating structural connectivity matrix.');
             ea_perform_ft_proxy(options);
@@ -47,7 +48,7 @@ if options.lc.func.compute_GM || options.lc.func.compute_CM
     disp(['*** Performing functional parts of LEAD-Connectome...']);
 
     % get files with rs-fMRI data
-    restfiles = dir([options.root,options.patientname,filesep,options.prefs.rest_prefix]);
+    restfiles = dir([options.root,options.patientname,filesep,options.prefs.rest_searchstring]);
 
     % get number of files with rs-fMRI data
     options.prefs.n_rest = numel(restfiles);
@@ -65,7 +66,7 @@ if options.lc.func.compute_CM
     if ~exist(expfolder,'dir')
         mkdir(expfolder);
     end
-
+[~, presentfiles] = ea_assignpretra(options);
     % set filenames for each rs-fMRI file
     for irest = 1:options.prefs.n_rest
         % set filenames for this iteration
@@ -76,7 +77,8 @@ if options.lc.func.compute_CM
         options.prefs.gmtc=strcat(name,'_tc.mat'); % extracted timecourses of resting state fMRI data
 
         % create connectivity matrix for each rs-fMRI file
-        if ~exist([expfolder,name,'_fMRI_CM.mat'],'file')
+        if ~ea_coreglocked(options,['r',ea_stripext(options.prefs.rest),'_',ea_stripext(presentfiles{1})]) || ...
+                ~exist([expfolder,ea_stripext(options.prefs.rest),'_fMRI_CM.mat'],'file');
             disp(['Creating connectivity matrix for rs-fMRI file #',num2str(irest),': ',options.prefs.rest]);
             [fMRI_CM, gmtc]=ea_createCM_fmri(options);
             cm=ea_export_CM_png(fMRI_CM,['fMRI Connectivity matrix for ',name],options);

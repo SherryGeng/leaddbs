@@ -26,8 +26,7 @@ elseif nargin==7
     options=varargin{4};
     stimname=varargin{5};
     thresh=varargin{6};
-        lgfigure=varargin{7};
-
+    lgfigure=varargin{7};
 elseif nargin==1
     if ischar(varargin{1}) % return name of method.
         varargout{1}='SimBio/FieldTrip';
@@ -35,9 +34,7 @@ elseif nargin==1
     end
 end
 
-
-
-S=ea_activecontacts(S);
+% S=ea_activecontacts(S);
 if ~any(S.activecontacts{side}) % empty VAT, no active contacts.
     fv.vertices=[0,0,0
         0,0,0
@@ -48,18 +45,13 @@ if ~any(S.activecontacts{side}) % empty VAT, no active contacts.
     return
 end
 
-
-
 vizz=0;
 options.considerpassivecontacts=0;
-
 
 % if isempty(find(S(side).U))
 %     varargout{1}=[]; varargout{2}=[];
 %     return
 % end
-
-
 
 %% get electrodes handles // initial parameters:
 resultfig=getappdata(gcf,'resultfig');
@@ -75,8 +67,9 @@ if auto
 end
 options.usediffusion=0; % set to 1 to incorporate diffusion signal (for now only possible using the mesoFT tracker).
 coords=acoords{side};
-
-if ea_headmodel_changed(options,side,S,elstruct)
+hmchanged=ea_headmodel_changed(options,side,S,elstruct); % can only use this test once.
+assignin('caller','hmchanged',hmchanged);
+    if hmchanged
     disp('No suitable headmodel found, rebuilding. This may take a while...');
 
     %load('empirical_testdata'); % will produce data taken from lead dbs: 'coords','stimparams','side','options'
@@ -632,7 +625,7 @@ indij = intersect(indi,indj);
 rhs(indexj(indij)) = rhs(indexj(indij)) - dirival(indexi(indij)).*s(indij);
 s(indi) = 0;
 dia(dirinodes) = 1; %hier auch, s.u.
-rhs(dirinodes) = dirival(dirinodes); %hier den zugriff ge�ndert
+rhs(dirinodes) = dirival(dirinodes); %hier den zugriff geaendert
 indij = find(ismember(indexj,dind)&~ismember(indexi,dind));
 rhs(indexi(indij)) = rhs(indexi(indij)) - dirival(indexj(indij)).*s(indij);
 s(indij) = 0;
@@ -1272,7 +1265,7 @@ while isfield(sens, 'balance') && isfield(sens.balance, 'current') && ~strcmp(se
         end
 
         if strcmp(sens.balance.current, 'planar')
-            if isfield(sens, 'type') && ~isempty(strfind(sens.type, '_planar'))
+            if isfield(sens, 'type') && contains(sens.type, '_planar')
                 % remove the planar postfox from the sensor type
                 sens.type = sens.type(1:(end-7));
             end
@@ -2350,9 +2343,9 @@ if isequal(hastrials, 'yes')
     okflag = isfield(data, 'trial');
     if ~okflag && isfield(data, 'dimord')
         % instead look in the dimord for rpt or subj
-        okflag = ~isempty(strfind(data.dimord, 'rpt')) || ...
-            ~isempty(strfind(data.dimord, 'rpttap')) || ...
-            ~isempty(strfind(data.dimord, 'subj'));
+        okflag = contains(data.dimord, 'rpt') || ...
+            contains(data.dimord, 'rpttap') || ...
+            contains(data.dimord, 'subj');
     end
     if ~okflag
         error('This function requires data with a ''trial'' field');
@@ -4419,7 +4412,7 @@ switch style
     case 'probabilistic'
 
         % convert from a cumulative to an exclusive representation
-        contains = false(length(fn));
+        within = false(length(fn));
         if length(fn)>4
             % test for each tissue whether it is overlapping with or contained in each other tissue
             warning('more than 4 tissue types, this may take a while');
@@ -4436,14 +4429,14 @@ switch style
                     continue
                 end
                 segj = segmentation.(fn{j})>0;
-                contains(i,j) = all(segj(segi(:))); % segi is fully contained in segj
-                if i~=j && contains(i,j)
+                within(i,j) = all(segj(segi(:))); % segi is fully contained in segj
+                if i~=j && within(i,j)
                     fprintf('the %s is fully contained in the %s, removing it from the %s\n', fn{i}, fn{j}, fn{j});
                     segmentation.(fn{j})(segi) = 0;
                 end
             end
         end
-        clear segi segj contains
+        clear segi segj within
 
     otherwise
         error('unsupported style "%s"', style);
@@ -9922,7 +9915,7 @@ if ~isfield(data, 'dimord')
         fn = fieldnames(data);
         sel = true(size(fn));
         for i=1:length(fn)
-            sel(i) = ~isempty(strfind(fn{i}, 'dimord'));
+            sel(i) = contains(fn{i}, 'dimord');
         end
         df = fn(sel);
 
@@ -10115,7 +10108,7 @@ iscomp         =  isfield(data, 'label') && isfield(data, 'topo') || isfield(dat
 isvolume       =  isfield(data, 'transform') && isfield(data, 'dim') && ~isfield(data, 'pos');
 issource       =  isfield(data, 'pos');
 isdip          =  isfield(data, 'dip');
-ismvar         =  isfield(data, 'dimord') && ~isempty(strfind(data.dimord, 'lag'));
+ismvar         =  isfield(data, 'dimord') && contains(data.dimord, 'lag');
 isfreqmvar     =  isfield(data, 'freq') && isfield(data, 'transfer');
 ischan         = ea_check_chan(data);
 issegmentation = ea_check_segmentation(data);
@@ -10123,7 +10116,7 @@ isparcellation = ea_check_parcellation(data);
 
 if ~isfreq
     % this applies to a freq structure from 2003 up to early 2006
-    isfreq = all(isfield(data, {'foi', 'label', 'dimord'})) && ~isempty(strfind(data.dimord, 'frq'));
+    isfreq = all(isfield(data, {'foi', 'label', 'dimord'})) && contains(data.dimord, 'frq');
 end
 
 % check if it is a spike structure
@@ -10500,7 +10493,8 @@ elseif isfield(vol,'hex')
 end
 
 try
-    [diinsy,cols,sysmat] = ea_calc_stiff_matrix_val(node,elem,cond,mele);
+    [diinsy,cols,sysmat] = ea_calc_stiff_matrix_val_wrapper(node,elem,cond,mele);
+    ea_delete([pwd, filesep, 'fort.6']);
 catch err
     if ispc && strcmp(err.identifier,'MATLAB:invalidMEXFile')
         error('Error executing mex-file. Microsoft Visual C++ 2008 Redistributables and Intel Visual Fortran Redistributables are required.')

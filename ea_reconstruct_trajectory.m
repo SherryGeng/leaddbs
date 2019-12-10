@@ -5,10 +5,15 @@ function [trajectory,trajvector]=ea_reconstruct_trajectory(priortrajectory,tra_n
 
 if options.modality==2 % CT support
     tra_nii.img=tra_nii.img*-1;
+else
+    if strcmp(options.entrypoint,'Auto')
+        warning('Automatic entry point detection not implemented for MRI. Setting to Manual.')
+        options.entrypoint = 'Manual';
+    end
 end
 
 %Vtra=spm_vol([options.root,patientname,filesep,patientname,'_tra_brain_A3_final.nii']);
-slice=zeros(size(tra_nii.img,1),size(tra_nii.img,2));
+slice=zeros(size(tra_nii.img,2),size(tra_nii.img,1));
 masknii=tra_nii;
 
 if options.verbose>1
@@ -24,6 +29,10 @@ mmvx=tra_nii.mat\mmpt;
 startslice=round(mmvx(3));
 clear mmpt mmvx
 
+if side>2 % always go for manual entrypoint in case of >second electrode.
+    options.entrypoint='Manual';
+end
+
 flipside=1+(tra_nii.mat(1)<0);
 
 if ~refine % if this is not a refine-run but an initial run, mask of first slice has to be defined heuristically.
@@ -36,8 +45,9 @@ if ~refine % if this is not a refine-run but an initial run, mask of first slice
             mask(masksz(1):masksz(2),masksz(3):masksz(4))=1;
 
             if side==flipside
-                mask=fliplr(mask);
+                mask=flip(mask,2);
             end
+            
             slice=double(tra_nii.img(:,:,startslice))'; % extract the correct slice.
             %slice=fliplr(slice);
             slice(slice==0)=nan;
@@ -57,6 +67,43 @@ if ~refine % if this is not a refine-run but an initial run, mask of first slice
             % reset mask from mouse input
             mask=zeros(size(slice,1),size(slice,2));
             mask(round(Y-10:Y+10),round(X-10:X+10))=1;
+        case 'Auto' 
+            % TP: Similar to manual, but try to detect entry-point using artefact
+            crop_n = 100;
+            slice=double(tra_nii.img(:,:,startslice))'; % extract the correct slice.
+            [h,w] = size(slice);
+            crop = slice(crop_n:h-crop_n, crop_n:w-crop_n);
+            midpt = floor(size(crop,2)/2);
+            idx = 1:midpt;
+            if side==flipside                
+                idx = midpt:size(crop,2);
+            end
+            b = crop(:,idx);
+            s = b;
+            s(s>(min(b(:))*0.2)) = 0;
+            height = abs(min(s(:))) * 0.05;
+            [~, xid] = findpeaks(-sgolayfilt(min(s,[],1), 1, 21), 'MinPeakHeight', height);
+            [~, yid] = findpeaks(-sgolayfilt(min(s,[],2), 1, 21), 'MinPeakHeight', height);
+            if (idx(1) == 1)
+                [~, id] = min(abs(xid-size(crop,2)));
+            else
+                [~, id] = min(abs(xid));
+            end
+            X = xid(id);
+            [~, id] = min(abs(yid-size(crop,1)));
+            Y = yid(id) + crop_n;
+            X = X + idx(1)-1 + crop_n;
+            
+            % further refine
+            crop_n = 20;
+            crop = slice(Y-crop_n:Y+crop_n, X-crop_n:X+crop_n);
+            [~, idx] = min(crop(:));
+            [Y2, X2] = ind2sub(size(crop), idx);
+            X = round(X + X2 - size(crop,2)/2);
+            Y = round(Y + Y2 - size(crop,1)/2);
+            
+            mask=zeros(h,w);
+            mask(round(Y-10:Y+10),round(X-10:X+10))=1;
         otherwise
             mask(masksz(1):masksz(2),masksz(3):masksz(4))=1;
             if side==flipside
@@ -67,8 +114,20 @@ if ~refine % if this is not a refine-run but an initial run, mask of first slice
     % initialize slice. mean average for entrypoint over the first 4 slices.
     slice=zeros(size(mask,1),size(mask,2),4);
     slicebw=zeros(size(mask,1),size(mask,2),4);
+
     for i=10:14
+        try
         [slice(:,:,i),slicebw(:,:,i)]=ea_prepare_slice(tra_nii,mask,1,startslice-(i-1),options);
+        catch
+            % keyboard % TP: Requesting input here pauses tasks when batch
+            % processing. I made a work around,but not sure if it will lead
+            % to further errors.
+            if (length(options.uipatdirs) > 1)
+                warning([options.patientname, ': Could not prepare slice when reconstructing trajectory.']);
+            else
+                keyboard
+            end
+        end
     end
     slice=mean(slice,3);
     slicebw=logical(mean(slicebw,3));
@@ -97,6 +156,12 @@ if side==1
 elseif side==2
     if options.verbose>1
         progressfig=figure('name','Finding left electrode','NumberTitle','off','Menubar','none','ToolBar','none');
+        set(gcf,'color','w');
+        axis off;
+    end
+else
+    if options.verbose>1
+        progressfig=figure('name',['Finding electrode number ',num2str(side)],'NumberTitle','off','Menubar','none','ToolBar','none');
         set(gcf,'color','w');
         axis off;
     end
@@ -133,6 +198,7 @@ for sliceno=2:startslice % sliceno is the counter (how many slices have been pro
     % slice.
     [slice,slicebw,maskslice,maskslicebw]=ea_prepare_slice(tra_nii,mask,sliceno,imgsliceno,options);
     if isempty(find(slicebw, 1)) % -> slice is not empty
+        % HANDLE EMPTY SLICE
     end
 
     % slice is always the raw current slice.
@@ -157,8 +223,9 @@ for sliceno=2:startslice % sliceno is the counter (how many slices have been pro
         % estimated one.
         [numidpoint,greymaskslicebw,options]=ea_findonemidpoint(slicebw,estpoint(1:2),mask,options);
         if isnan(numidpoint)
-            ea_showdis('Midpoint is nan. Stopping.', options.verbose);
-            break
+%            ea_showdis('Midpoint is nan. Stopping.', options.verbose);
+%            break
+            numidpoint=estpoint(1:2);
         end
 
         if ea_pdist([estpoint;[numidpoint,imgsliceno]])<15-maxthree(refine)
@@ -196,6 +263,7 @@ for sliceno=2:startslice % sliceno is the counter (how many slices have been pro
     %-------------------------------------------------------------------------------------------------%
     % this function estimates a fitted line and the following point based on the last points.
     [trajectory,trajvector,estpoint]=ea_fit_line(centerline);
+
     % ea_showdis(['Next point was estimated to be ',num2str(estpoint),'.'],options.verbose);
     % update mask
     mask=zeros(size(slice,1),size(slice,2));
@@ -208,16 +276,29 @@ for sliceno=2:startslice % sliceno is the counter (how many slices have been pro
         close(progressfig)
         ea_error(sprintf(['Mask out of bounds! Must have lost trajectory...\n' ...
             'Please try a different ''Mask window size'' or ' ...
-            'try manual mode by setting ''Entrypoint for Target'' to ''Manual''.']), ...
+            'try manual mode by setting ''Entrypoint for Target'' to ''Manual''.\n'...
+            'Patient: ', options.patientname]), ...
             'Electrode Reconstruction Error', ...
             dbstack);
         return
         %pause
     end
-
-    mask(round(estpoint(2)-options.maskwindow : estpoint(2)+options.maskwindow), ...
-        round(estpoint(1)-options.maskwindow : estpoint(1)+options.maskwindow))=1;
-
+    % TP: Fixing bug. Sometimes when the trajectory is not found the index
+    % to mask is less than 1 causing Lead to crash
+    try
+        mask(round(estpoint(2)-options.maskwindow : estpoint(2)+options.maskwindow), ...
+            round(estpoint(1)-options.maskwindow : estpoint(1)+options.maskwindow))=1;
+    catch ME
+        if (strcmp(ME.identifier, 'MATLAB:badsubscript'))
+            ea_error(sprintf(['Mask index out of bounds! Must have lost trajectory...\n' ...
+            'Please try a different ''Mask window size'' or ' ...
+            'try manual mode by setting ''Entrypoint for Target'' to ''Manual''.\n'...
+            'Patient: ', options.patientname]), ...
+            'Electrode Reconstruction Error', ...
+            dbstack);
+            return;
+        end
+    end
     %% part 4: visualization...
     %-------------------------------------------------------------------%
     if options.verbose>1
@@ -281,6 +362,7 @@ catch
     ea_error('Please do not close the progress figure during reconstruction.')
 end
 
+
 function ea_keystr(progressfig,event)
 commnd=event.Character;
 switch lower(commnd)
@@ -306,28 +388,28 @@ end
 
 function [startslice,endslice,masksz]=ea_getstartslice(options) % get reconstruction default dimensions for current space
 spacedef=ea_getspacedef;
+standardspacedef=load([ea_getearoot,'templates',filesep,'space',filesep,'MNI_ICBM_2009b_NLIN_ASYM',filesep,'ea_space_def.mat']);
 if isfield(spacedef,'guidef')
     whichentry=ismember(options.entrypoint,spacedef.guidef.entrypoints);
     masksz=spacedef.guidef.masks(whichentry,:);
     startslice=spacedef.guidef.startslice;
     endslice=spacedef.guidef.endslice;
-
 else % use MNI defaults
     startslice=8.7; % default height at where to start auto reconstruction
     endslice=-15.5;
     switch options.entrypoint
         case 'STN, GPi or ViM'
-            masksz=[200,350,70,220];
+            masksz=standardspacedef.spacedef.guidef.masks(1,:);
         case 'Cg25'
-            masksz=[390,490,270,370];
+            masksz=standardspacedef.spacedef.guidef.masks(2,:);
     end
 end
-if strcmp(options.entrypoint,'Manual')
+
+if strcmp(options.entrypoint,'Manual') || strcmp(options.entrypoint,'Auto')
     try
         masksz=spacedef.guidef.masks(1,:);
     catch
-        masksz=[200,350,70,220]; % use STN default
-
+        masksz=standardspacedef.spacedef.guidef.masks(1,:); % use STN default
     end
 end
 
@@ -335,8 +417,6 @@ if ~exist('masksz','var') % e.g. in case manual set
     try
         masksz=spacedef.guidef.masks(1,:); % use first entry if defined
     catch
-        masksz=[200,350,70,220]; % use STN default
+        masksz=standardspacedef.spacedef.guidef.masks(1,:); % use STN default
     end
 end
-
-

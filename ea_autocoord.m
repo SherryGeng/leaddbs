@@ -9,51 +9,53 @@ function ea_autocoord(options)
 % __________________________________________________________________________________
 % Copyright (C) 2014 Charite University Medicine Berlin, Movement Disorders Unit
 % Andreas Horn
+options.tic=tic;
 
 % set patientdir
 options.prefs.patientdir = options.patientname;
 
 % get accurate electrode specifications and save it in options.
 options = ea_resolve_elspec(options);
-
 directory = [options.root,options.patientname,filesep];
 
-if options.dicomimp || options.assignnii % do DICOM-Import.
-    if options.dicomimp
-        if strcmp(options.patientname, 'No Patient Selected')
-            msgbox('Please choose patient directory first!','Error','error');
-        else
-            ea_dicom_import(options);
-        end
-    end
-
-    if options.assignnii
-        if strcmp(options.patientname, 'No Patient Selected')
-            msgbox('Please choose patient directory first!','Error','error');
-        else
-            outdir = [options.root, options.patientname, filesep];
-            % assign image type here
-            di = dir([outdir,'*.nii']);
-            di = ea_sortbytes(di);
-            for d=1:length(di)
-                dcfilename=[outdir,di(d).name];
-                ea_imageclassifier({dcfilename});
-            end
-            figs=allchild(0);
-            ids={figs.Tag};
-            [~,imclassfids]=ismember(ids,'imclassf');
-            if ~any(imclassfids)
-                msgbox('All NIfTI files have been assigned already.');
+if strcmp(options.leadprod, 'dbs') || strcmp(options.leadprod, 'connectome')
+    if options.dicomimp.do || options.assignnii % do DICOM-Import.
+        if options.dicomimp.do
+            if strcmp(options.patientname, 'No Patient Selected')
+                msgbox('Please choose patient directory first!','Error','error');
             else
-                set(figs(logical(imclassfids)),'Visible','on');
-            end
-            if isempty(di)
-                msgbox('Could not find any NIfTI files to rename/assign.');
+                ea_dicom_import(options);
             end
         end
-    end
 
-    return % For now we recommend to do import & processing in separate run calls.
+        if options.assignnii
+            if strcmp(options.patientname, 'No Patient Selected')
+                msgbox('Please choose patient directory first!','Error','error');
+            else
+                outdir = [options.root, options.patientname, filesep];
+                % assign image type here
+                di = dir([outdir,'*.nii']);
+                di = ea_sortbytes(di);
+                for d=1:length(di)
+                    dcfilename=[outdir,di(d).name];
+                    ea_imageclassifier({dcfilename});
+                end
+                figs=allchild(0);
+                ids={figs.Tag};
+                [~,imclassfids]=ismember(ids,'imclassf');
+                if ~any(imclassfids)
+                    msgbox('All NIfTI files have been assigned already.');
+                else
+                    set(figs(logical(imclassfids)),'Visible','on');
+                end
+                if isempty(di)
+                    msgbox('Could not find any NIfTI files to rename/assign.');
+                end
+            end
+        end
+
+        return % For now we recommend to do import & processing in separate run calls.
+    end
 end
 
 % check connectome-mapper tags
@@ -61,8 +63,12 @@ if isfield(options,'lcm')
     ea_lcm(options);
 end
 
-if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer can be opened if no patient is selected.
+if isfield(options,'predict')
+   ea_predict(options);
+end
 
+% only 3D-rendering viewer can be opened if no patient is selected.
+if ~strcmp(options.patientname,'No Patient Selected') && ~isempty(options.patientname)
     % move files for compatibility
     try ea_compat_patfolder(options); end
 
@@ -79,6 +85,11 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
     % anat preprocess, only do once.
     % a small hidden file '.pp' inside patient folder will show this has been done before.
     if ~exist([directory,'.pp'],'file') && ~exist([directory,'ea_normmethod_applied.mat'],'file')
+        % create untouched copy
+        if ~isempty(presentfiles) && ~exist([directory,'raw_',presentfiles{1}],'file')
+            copyfile([directory,presentfiles{1}],[directory,'raw_',presentfiles{1}]);
+        end
+
         % apply reorientation/cropping and biasfieldcorrection
         for fi=1:length(presentfiles)
             ea_anatpreprocess([directory,presentfiles{fi}]);
@@ -86,6 +97,11 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
 
         % Reslice(interpolate) preoperative anatomical image if needed
         try ea_resliceanat(options); end
+
+        % acpcdetect
+        % try ea_acpcdetect([directory,presentfiles{1}]); end
+
+        try ea_precoreg([directory,presentfiles{1}],options.primarytemplate,options); end
 
         try
             fs = fopen([directory,'.pp'],'w');
@@ -96,15 +112,7 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
 
     % NEED FURTHER TUNE: auto detection of MRCT modality for the patient
     try
-        modality = ea_checkctmrpresent(directory);
-        modality = find(modality);
-        if isempty(modality)    % no postop image present
-            options.modality = 1;    % set to MR to work it around
-        elseif length(modality) == 2    % both MR and CT image present
-            options.modality = options.prefs.preferMRCT;  % set the modality according to 'prefs.preferMRCT'
-        else    % only one modality present
-            options.modality = modality;
-        end
+        options.modality = ea_getmodality(directory);
     end
 
     if options.modality == 2 % CT support
@@ -119,7 +127,6 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
             ea_gencoregcheckfigs(options); % generate checkreg figures
             diary off
         end
-
     end
 
     if options.coregmr.do
@@ -132,11 +139,6 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
         diary off
     end
 
-    if options.coregmr.check
-        options.normcoreg='coreg';
-        ea_checkcoreg(options);
-    end
-
     if options.normalize.do
         diary([directory, 'normalize_', datestr(now, 'yyyymmddTHHMMss'), '.log']);
         if ~(ea_coreglocked(options,'glanat')==2) || strcmp(options.normalize.method,'ea_normalize_apply_normalization') % =2 means permanent lock for normalizations and only happens if all preop anatomy files were approved at time of approving normalization.
@@ -145,10 +147,18 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
             else
                 doit=1;
             end
+
             if doit || strcmp(options.normalize.method,'ea_normalize_apply_normalization')
                 clear doit
                 % 3. finally perform normalization based on dominant or all preop MRIs
                 ea_dumpnormmethod(options,options.normalize.method,'normmethod'); % has to come first due to applynormalization.
+
+                % cleanup already normalized versions:
+                ea_delete([options.root,options.patientname,filesep,options.prefs.gprenii]);
+                for fi=2:length(presentfiles)
+                    ea_delete([options.root,options.patientname,filesep,'gl',presentfiles{fi}]);
+                end
+
                 eval([options.normalize.method,'(options)']); % triggers the normalization function and passes the options struct to it.
 
                 if options.modality == 2 % (Re-) compute tonemapped (normalized) CT
@@ -175,148 +185,167 @@ if ~strcmp(options.patientname,'No Patient Selected') % only 3D-rendering viewer
         ea_ptspecific_atl(options);
     end
 
-    if options.atl.normalize % normalize patient-specific atlas-set.
+    if options.atl.normalize % normalize patient's atlas-set.
         ea_norm_ptspecific_atl(options)
     end
 
-    if options.normalize.check
+    if options.scrf.do
+        if ~ea_coreglocked(options,'brainshift') || options.overwriteapproved
+            options.autobrainshift=1;
+            ea_subcorticalrefine(options);
+            options=rmfield(options,'autobrainshift');
+        end
+    end
+
+    if options.normalize.check %check box "Check Results" in "Volume Registrations" panel
         % export "control" niftis with wireframe of normal anatomy..
+        if ~exist([directory,'checkreg'],'file')
+            ea_gencoregcheckfigs(options); % generate checkreg figures if they not yet exist
+        end
         options.normcoreg='normalize';
         ea_checkcoreg(options);
+        e=evalin('base', 'checkregempty');
+        evalin('base',' clear checkregempty');
+        if e && ~ea_coreglocked(options,'brainshift') ...
+             && exist([directory,'scrf',filesep,'scrf_instore.mat'], 'file')
+            ea_subcorticalrefine(options);
+        end
+    end
+    
+    if options.normalize.refine
+       ea_checkstructures(options); 
+    end
 
+    if options.ecog.extractsurface.do
+       switch options.ecog.extractsurface.method
+           case 1 % CAT 12
+               hastb=ea_hastoolbox('cat');
+               if ~hastb
+                   ea_error('CAT12 needs to be installed to the SPM toolbox directory');
+               end
+               ea_cat_seg(options);
+           case 2 % FS
+               hastb=ea_hastoolbox('freesurfer');
+
+               if ~hastb
+                   ea_error('Freesurfer needs to be installed and connected to Lead-DBS');
+               end
+               hastb=ea_hastoolbox('fsl');
+               if ~hastb
+                   ea_error('FSL needs to be installed and connected to Lead-DBS');
+               end
+
+               options.prefs=ea_prefs;
+               [options,presentfiles]=ea_assignpretra(options);
+               setenv('SUBJECTS_DIR',[options.root,options.patientname,filesep]);
+               if exist([options.root,options.patientname,filesep,'fs'],'dir')
+                   rmdir([options.root,options.patientname,filesep,'fs'],'s');
+               end
+               system([options.prefs.fspath,filesep,'bin',filesep,...
+                   'recon-all',...
+                   ' -subjid fs',...
+                   ' -i ',[options.root,options.patientname,filesep,presentfiles{1}],...
+                   ' -all']);
+       end
     end
 
     if options.doreconstruction
-        ea_checkfiles(options);
-        switch options.reconmethod
-            case 1 % TRAC/CORE
-                for side=options.sides
+        wasnative=options.native;
+        poptions=ea_checkmanapproved(options);
+        if ~isempty(poptions.sides)
+            switch options.reconmethod
+                case 'Refined TRAC/CORE' % refined TRAC/CORE
+                    [coords_mm,trajectory,markers]=ea_runtraccore(poptions);
+                    options.hybridsave=1; % save output of TRAC/CORE before progressing
+                    options.elside=options.sides(1);
+                    elmodel=options.elmodel;
+                    ea_save_reconstruction(coords_mm,trajectory,markers,elmodel,0,options);
+                    [coords_mm,trajectory,markers] = ea_refinecoords(poptions); % experimental fiducial marker refine method
+                    options.native = 1;
+                case 'TRAC/CORE (Horn 2015)' % TRAC/CORE
+                    [coords_mm,trajectory,markers]=ea_runtraccore(poptions);
+                    options.native=0;
 
-                    %try
-                    % call main routine reconstructing trajectory for one side.
-                    [coords,trajvector{side},trajectory{side},tramat]=ea_reconstruct(options.patientname,options,side);
-
-                    % refit electrodes starting from first electrode (this is redundant at this point).
-                    coords_mm{side} = ea_map_coords(coords', [directory,options.prefs.tranii])';
-
-                    [~,distmm]=ea_calc_distance(options.elspec.eldist,trajvector{side},tramat(1:3,1:3),[directory,options.prefs.tranii]);
-
-                    comp = ea_map_coords([0,0,0;trajvector{side}]', [directory,options.prefs.tranii])'; % (XYZ_mm unaltered)
-
-                    trajvector{side}=diff(comp);
-
-                    normtrajvector{side}=trajvector{side}./norm(trajvector{side});
-
-                    for electrode=2:4
-                        coords_mm{side}(electrode,:)=coords_mm{side}(1,:)-normtrajvector{side}.*((electrode-1)*distmm);
-                    end
-                    markers(side).head=coords_mm{side}(1,:);
-                    markers(side).tail=coords_mm{side}(4,:);
-
-                    orth=null(normtrajvector{side})*(options.elspec.lead_diameter/2);
-
-                    markers(side).x=coords_mm{side}(1,:)+orth(:,1)';
-                    markers(side).y=coords_mm{side}(1,:)+orth(:,2)'; % corresponding points in reality
-
-                    coords_mm=ea_resolvecoords(markers,options);
-                end
-
-
-                % transform trajectory to mm space:
-                for side=1:length(options.sides)
+                case 'PaCER (Husch 2017)' % PaCER
                     try
-                        if ~isempty(trajectory{side})
-                            trajectory{side}=ea_map_coords(trajectory{side}', [directory,options.prefs.tranii])';
-                        end
-
-                    end
-                end
-                options.hybridsave=1;
-
-                % save reconstruction results
-                ea_methods(options,...
-                    ['DBS-Electrodes were automatically pre-localized in native & template space using Lead-DBS software',...
-                    ' (Horn & Kuehn 2015; SCR_002915; http://www.lead-dbs.org).'],...
-                    {'Horn, A., & Kuehn, A. A. (2015). Lead-DBS: a toolbox for deep brain stimulation electrode localizations and visualizations. NeuroImage, 107, 127?135. http://doi.org/10.1016/j.neuroimage.2014.12.002'});
-
-            case 2 % PaCER
-
-                elecmodels=PaCER([options.root,options.patientname,filesep,options.prefs.ctnii_coregistered],'finalDegree',1,'electrodeType',ea_mod2pacermod(options.elmodel));
-
-                for side=options.sides
-                    coords_mm{side}=elecmodels{side}.getContactPositions3D;
-                    for dim=1:3
-                        trajectory{side}(:,dim)=linspace(coords_mm{side}(1,dim),coords_mm{side}(1,dim)+10*(coords_mm{side}(1,dim)-coords_mm{side}(end,dim)),20);
+                        [coords_mm,trajectory,markers]=ea_runpacer(poptions);
+                        options.native=1;
+                    catch e % revert to TRAC/CORE
+                        warning('PaCER or the LeadDBS Wrapper for PaCER failed with the following error:');
+                        disp(['Identifier: ' e.identifier]);
+                        disp(['Message: ' e.message]);
+                        disp(['In: ' e.stack(1).file]);
+                        disp(['Method: ' e.stack(1).name]);
+                        disp(['Line: ' num2str(e.stack(1).line)]);
+                        disp('Please check your input data carefully.');
+                        disp('If the error persists, please consider a bug report at <a href="https://github.com/adhusch/PaCER/issues">https://github.com/adhusch/PaCER/issues</a>.');
+                        ea_error('PaCER failed. Potentially try running the TRAC/CORE Algorithm or a fully manual pre-reconstruction.');
                     end
 
-                    markers(side).head=coords_mm{side}(1,:);
-                    markers(side).tail=coords_mm{side}(4,:);
-                    normtrajvector{side}=(coords_mm{side}(1,:)-coords_mm{side}(end,:))/...
-                    norm((coords_mm{side}(1,:)-coords_mm{side}(end,:)));
-                    orth=null(normtrajvector{side})*(options.elspec.lead_diameter/2);
+                case 'Manual' % Manual
+                    [coords_mm,trajectory,markers]=ea_runmanual(poptions);
+                    options.native=1;
 
-                    markers(side).x=coords_mm{side}(1,:)+orth(:,1)';
-                    markers(side).y=coords_mm{side}(1,:)+orth(:,2)'; % corresponding points in reality
-
-                end
-
-                options.native=1;
-                options.hybridsave=1;
-                ea_methods(options,...
-                    ['DBS-Electrodes were automatically pre-localized in native & template space using the PaCER algorithm',...
-                    ' (Husch to appear; http://adhusch.github.io/PaCER/).'],...
-                    {'Husch (to appear). PaCER - A fully automated method for electrode trajectory and contact reconstruction in deep brain stimulation.'});
+                case 'Slicer (Manual)' % Manually mark lead head/tail in Slicer 3D
+                    [coords_mm,trajectory,markers]=ea_runmanualslicer(poptions);
+                    options.native=1;
+            end
+            options.hybridsave=1;
+            options.elside=options.sides(1);
+            elmodel=options.elmodel;
+            ea_save_reconstruction(coords_mm,trajectory,markers,elmodel,0,options);
+            if isfield(options,'hybridsave')
+                options=rmfield(options,'hybridsave');
+            end
         end
-        elmodel=options.elmodel;
-        ea_save_reconstruction(coords_mm,trajectory,markers,elmodel,0,options);
-        if isfield(options,'hybridsave')
-            options=rmfield(options,'hybridsave');
-        end
-
+        options.native=wasnative; % restore original setting.
     end
 
     if options.manualheightcorrection
-        % load reconstruction results
-        % try
-        %     [coords_mm,trajectory,markers,elmodel,manually_corrected]=ea_load_reconstruction(options);
-        % catch
-        %     ea_error([patientname,': No reconstruction information found. Please run reconstruction first.']);
-        % end
-        % ea_save_reconstruction(coords_mm,trajectory,markers,elmodel,0,options);
-        mcfig=figure('name',[options.patientname,': Manual Height Correction'],'numbertitle','off');
-        %warning('off');
-        try
-            ea_maximize(mcfig);
+        poptions=ea_checkmanapproved(options);
+        if ~isempty(poptions.sides)
+            mcfig=figure('name',[options.patientname,': Electrode Reconstruction'],'numbertitle','off');
+            %warning('off');
+            try
+                ea_maximize(mcfig);
+            end
+            options.elside=options.sides(1);
+            ea_manualreconstruction(mcfig,options.patientname,options);
         end
-        ea_manualreconstruction(mcfig,options.patientname,options);
     else
         ea_write(options)
     end
-
 else
     ea_write(options)
 end
+
+
+function poptions=ea_checkmanapproved(options)
+poptions=options;
+if ~options.overwriteapproved && exist([options.root,options.patientname,filesep,'ea_reconstruction.mat'],'file') % only re-open not manually approved reconstructions.
+    load([options.root,options.patientname,filesep,'ea_reconstruction.mat']);
+    todel=[]; cnt=1;
+    for side=options.sides
+        try % index may exceed entries in legacy saves
+            if reco.props(side).manually_corrected
+                todel(cnt)=side; cnt=cnt+1;
+            end
+        end
+    end
+    [~,ix]=ismember(todel,poptions.sides);
+    poptions.sides(ix)=[]; % do not re-reconstruct the ones already approved.
+
+end
+
 
 function di=ea_sortbytes(di)
 if isempty(di)
     return
 end
+
 for d=1:length(di)
     bytesc(d)=di(d).bytes;
 end
+
 [~,order]=sort(bytesc,'ascend');
 di=di(order);
-
-function model=ea_mod2pacermod(model)
-% current dictionary to translate between Lead-DBS and PaCER nomenclature.
-% Hoping to standardize this in the future.
-switch model
-    case 'Medtronic 3389'
-       % pass through (same nomenclature)
-    case 'Medtronic 3387'
-       % pass through (same nomenclature)
-    case 'Boston Scientific Vercise Directed'
-        model='Boston Vercise Directional';
-    otherwise
-        model=''; % 'Unkown Electrode Type'
-end

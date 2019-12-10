@@ -1,21 +1,16 @@
 function ea_lcm_struc(options)
 
-
 if strcmp(options.lcm.struc.connectome,'No structural connectome found.')
     return
 end
 disp('Running structural connectivity...');
 
-if strcmp(options.lcm.struc.connectome,'Patient-specific fiber tracts')
-    base=[options.root,options.patientname,filesep,'connectomes',filesep];
+if strcmp(options.lcm.struc.connectome, 'Patient''s fiber tracts')
+    base='Patient''s fiber tracts';
+    options.lcm.struc.connectome=options.prefs.FTR_normalized;
 else
     base=ea_getconnectomebase();
 end
-
-if strcmp(options.lcm.struc.connectome,'Patient-specific fiber tracts')
-    options.lcm.struc.connectome=options.prefs.FTR_normalized;
-end
-
 
 cs_dmri_conseed(base,options.lcm.struc.connectome,...
     options.lcm.seeds',...
@@ -25,6 +20,7 @@ cs_dmri_conseed(base,options.lcm.struc.connectome,...
     options.lcm.omask,...
     ea_resolve_espace(options.lcm.struc.espace),options);
 disp('Done.');
+
 
 function fi=ea_resolve_espace(sp)
 
@@ -37,4 +33,3 @@ switch sp
     case 3
         fi=['555.nii'];
 end
-

@@ -74,7 +74,6 @@ if get(handles.tdbackdrop,'Value')>length(backdrops)
     set(handles.tdbackdrop,'Value',1);
 end
 
-
 try
     d2=options.prefs.machine.d2;
     ea_options2tdhandles(handles,d2);
@@ -148,7 +147,7 @@ function tdcontourcolor_Callback(hObject, eventdata, handles)
 % hObject    handle to tdcontourcolor (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-tdcol=uisetcolor;
+tdcol = ea_uisetcolor;
 setappdata(hObject,'color',tdcol);
 
 % --- Executes on button press in savebutton.

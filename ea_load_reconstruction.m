@@ -12,10 +12,20 @@ function  [coords_mm,trajectory,markers,elmodel,manually_corrected,coords_acpc]=
 % Please do not use uipatdirs to determine patient directory, this will
 % confuse calls with multiple patients selected.
 
-options=varargin{1};
+coords_acpc=nan; % make sure the output is there.
+if isstruct(varargin{1})
 
+    options=varargin{1};
+    
+    directory=[options.root,options.patientname,filesep];
 
-directory=[options.root,options.patientname,filesep];
+else
+    directory=varargin{1};
+    if ~strcmp(directory(end),filesep)
+        directory=[directory,filesep];
+    end
+    options=ea_getptopts(directory);    
+end
 try
     % Load Reconstruction
     load([directory,'ea_reconstruction.mat']);
@@ -40,11 +50,29 @@ if exist('reco','var')
     else
         space_type = 'mni';
     end
-    
-    coords_mm = reco.(space_type).coords_mm;
 
-    trajectory = reco.(space_type).trajectory;
+
     markers = reco.(space_type).markers;
+    if ~isfield(markers,'x')
+        for side=1:2
+            normtrajvector=(markers(side).tail-markers(side).head)./norm(markers(side).tail-markers(side).head);
+            orth=null(normtrajvector)*(options.elspec.lead_diameter/2);
+            markers(side).x=markers(side).head+orth(:,1)';
+            markers(side).y=markers(side).head+orth(:,2)'; % corresponding points in reality
+        end
+    end
+
+    if isfield(reco.(space_type),'coords_mm')
+        coords_mm = reco.(space_type).coords_mm;
+    else
+        [coords_mm]=ea_resolvecoords(markers,options,0);
+    end
+
+    if isfield(reco.(space_type),'trajectory')
+        trajectory = reco.(space_type).trajectory;
+    else
+        [~,trajectory,markers]=ea_resolvecoords(markers,options,0);
+    end
 
     try
         coords_acpc=reco.acpc.coords_mm;
@@ -52,11 +80,27 @@ if exist('reco','var')
         coords_acpc=nan;
     end
 
-    manually_corrected=reco.props.manually_corrected;
-    elmodel=reco.props.elmodel;
+    try
+        manually_corrected=reco.props(options.elside).manually_corrected;
+        elmodel=reco.props(options.elside).elmodel;
+    catch % legacy
+        manually_corrected=reco.props(1).manually_corrected;
+        elmodel=reco.props(1).elmodel;
+    end
+
+    if isempty(elmodel)
+        for side=1:length(reco.props)
+            elmodel=reco.props(side).elmodel;
+            if ~isempty(elmodel)
+                break
+            end
+        end
+    end
 
 else % legacy format
-
+    if ~isfield(options,'elspec')
+        options=ea_getptopts(directory,options);
+    end
     if ~exist('markers','var') % backward compatibility to old recon format
         for side=1:options.sides
             markers(side).head=coords_mm{side}(1,:);
@@ -92,6 +136,9 @@ else % legacy format
 end
 
 if ~exist('manually_corrected','var')
+    manually_corrected=0;
+end
+if isempty(manually_corrected)
     manually_corrected=0;
 end
 

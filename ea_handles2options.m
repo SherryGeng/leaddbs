@@ -1,5 +1,4 @@
 function options=ea_handles2options(handles)
-
 % main function converting GUI handles to options struct used in
 % ea_autocoord & ea_write (i.e. the main lead batch functions).
 
@@ -15,14 +14,18 @@ options.cor_stdfactor=1.0; % Default: 1.0 - the higher this factor, the lower th
 
 options.earoot = ea_getearoot;
 try % not working when calling from lead_anatomy
-    options.dicomimp=get(handles.dicomcheck,'Value');
+    options.dicomimp.do=get(handles.dicomcheck,'Value');
     options.assignnii=get(handles.assignnii,'Value');
     options.normalize.do=(get(handles.normalize_checkbox,'Value') == get(handles.normalize_checkbox,'Max'));
     options.normalize.settings=getappdata(handles.normsettings,'settings');
 catch
-    options.dicomimp=0;
+    options.dicomimp.do=0;
     options.assignnii=0;
     options.normalize.do=0;
+end
+
+try
+    options.dicomimp.method=get(handles.dcm2niiselect,'Value');
 end
 
 try
@@ -37,6 +40,23 @@ catch
     options.normalize.check=0;
 end
 
+try % also open up checkreg in case of dMRI check registrations
+    if get(handles.checkregdmri,'Value')
+        options.normalize.check=1;
+    end
+end
+
+try % also open up checkreg in case of dMRI check registrations
+    if get(handles.checkregfmri,'Value')
+        options.normalize.check=1;
+    end
+end
+
+options.normalize.refine=0;
+try
+    options.normalize.refine=get(handles.refinefit,'Value');
+end
+
 try % not working when calling from lead_anatomy
     options.coregmr.check=(get(handles.coregmrcheck,'Value') == get(handles.coregmrcheck,'Max'));
 catch
@@ -44,7 +64,7 @@ catch
 end
 
 try
-   options.overwriteapproved=get(handles.overwriteapproved,'Value');
+    options.overwriteapproved=get(handles.overwriteapproved,'Value');
 end
 
 try
@@ -80,18 +100,10 @@ options.verbose=3; % 4: Show figures but close them 3: Show all but close all fi
 
 %options.sides=sidepos(logical(sidelog)); %side=1 -> left electrode, side=2 -> right electrode. both: [1:2]
 try
-    switch get(handles.sidespopup,'Value')
-        case 1
-            options.sides=1:2;
-        case 2
-            options.sides=1;
-        case 3
-            options.sides=2;
-    end
+    options.sides=ea_assignsides(handles);
 catch
     options.sides=1:2;
 end
-
 try
     options.doreconstruction=(get(handles.doreconstruction_checkbox,'Value') == get(handles.doreconstruction_checkbox,'Max'));
     if strcmp(get(handles.maskwindow_txt,'String'),'auto')
@@ -159,9 +171,15 @@ catch
 end
 
 try
-    options.scrf=get(handles.scrf,'Value');
+    options.scrf.do=get(handles.scrf,'Value');
 catch
-    options.scrf=0;
+    options.scrf.do=0;
+end
+
+try
+    options.scrf.mask=get(handles.scrfmask,'Value');
+catch
+    options.scrf.mask=2;
 end
 
 try
@@ -198,6 +216,9 @@ try
     options.elmodeln = get(handles.electrode_model_popup,'Value');
     string_list = get(handles.electrode_model_popup,'String');
     options.elmodel=string_list{options.elmodeln};
+catch
+    elms=ea_resolve_elspec;
+    options.elmodel=elms{1};
 end
 try
     options.atlasset=get(handles.atlassetpopup,'String'); %{get(handles.atlassetpopup,'Value')}
@@ -215,7 +236,8 @@ try
 end
 
 try
-    options.reconmethod=get(handles.reconmethod,'Value');
+    options.reconmethod=get(handles.reconmethod,'String');
+    options.reconmethod=options.reconmethod{get(handles.reconmethod,'Value')};
 end
 
 options.expstatvat.do=0;
@@ -234,27 +256,34 @@ end
 try
     sdp=get(handles.seeddefpopup,'String');
     if iscell(sdp)
-    sdp=sdp{get(handles.seeddefpopup,'Value')};
+        sdp=sdp{get(handles.seeddefpopup,'Value')};
     end
     switch sdp
         case 'Manually choose seeds'
             options.lcm.seeds=getappdata(handles.seedbutton,'seeds');
             options.lcm.seeddef='manual';
+        case 'Manually choose parcellation'
+            options.lcm.seeds=getappdata(handles.seedbutton,'seeds');
+            options.lcm.seeddef='parcellation';
         otherwise
             stimname=sdp(11:end);
             options.lcm.seeds=stimname;
             options.lcm.seeddef='vats';
     end
-    options.lcm.odir=getappdata(handles.odirbutton,'odir');
-    if isempty(options.lcm.odir)
-        if ~strcmp(options.lcm.seeddef,'vats')
-            try
-            options.lcm.odir=[fileparts(options.lcm.seeds{1}),filesep];
-            end
-        else
-            options.lcm.odir='';
-        end
+    try
+        options.lcm.odir=getappdata(handles.odirbutton,'odir');
+    catch % called from predict module.
+        options=rmfield(options,'lcm');
     end
+%     if isempty(options.lcm.odir)
+%         if ~strcmp(options.lcm.seeddef,'vats')
+%             try
+%             options.lcm.odir=[fileparts(options.lcm.seeds{1}),filesep];
+%             end
+%         else
+%             options.lcm.odir='';
+%         end
+%     end
     options.lcm.omask=getappdata(handles.omaskbutton,'omask');
     options.lcm.struc.do=get(handles.dostructural,'Value');
     options.lcm.func.do=get(handles.dofunctional,'Value');
@@ -269,4 +298,74 @@ try
         options.lcm.func.connectome=options.lcm.func.connectome{get(handles.fmripopup,'Value')};
     end
     options.lcm.struc.espace=get(handles.strucexportspace,'Value');
+end
+
+% lead predict options:
+try
+    includes={'Coords','VTA','dMRI','fMRI'};
+    todel=[];
+    if ~strcmp(handles.inccoordinate.Enable,'on') || ~handles.inccoordinate.Value
+        todel=[todel,1];
+    end
+    if ~strcmp(handles.incvta.Enable,'on') || ~handles.incvta.Value
+        todel=[todel,2];
+    end
+    if ~strcmp(handles.incstructural.Enable,'on') || ~handles.incstructural.Value
+        todel=[todel,3];
+    end
+    if ~strcmp(handles.incfunctional.Enable,'on') || ~handles.incfunctional.Value
+        todel=[todel,4];
+    end
+    includes(todel)=[];
+    options.predict.includes=includes;
+    % dMRI connectome
+    if ~iscell(handles.fiberspopup.String)
+        options.predict.dMRIcon{1}=handles.fiberspopup.String;
+    else
+        options.predict.dMRIcon=handles.fiberspopup.String;
+    end
+    options.predict.dMRIcon=options.predict.dMRIcon{handles.fiberspopup.Value};
+
+    %fMRI connectome
+    if ~iscell(handles.fmripopup.String)
+        options.predict.fMRIcon{1}=handles.fmripopup.String;
+    else
+    	options.predict.fMRIcon=handles.fmripopup.String;
+    end
+    options.predict.fMRIcon=options.predict.fMRIcon{handles.fmripopup.Value};
+
+    % Chosen prediction model
+    mfiles=getappdata(handles.predictionmodel,'mfiles');
+    if ~iscell(handles.predictionmodel.String)
+    	options.predict.model{1}=handles.predictionmodel.String;
+    else
+    	options.predict.model=handles.predictionmodel.String;
+    end
+    options.predict.model=options.predict.model{handles.predictionmodel.Value};
+    options.predict.model_mfile=mfiles{handles.predictionmodel.Value};
+
+    % chosen stimulation name
+    if ~iscell(handles.seeddefpopup.String)
+    	options.predict.stimulation{1}=handles.seeddefpopup.String;
+    else
+    	options.predict.stimulation=handles.seeddefpopup.String;
+    end
+    options.predict.stimulation=options.predict.stimulation{handles.seeddefpopup.Value};
+end
+try
+    options.ecog.extractsurface.do=get(handles.extractsurface,'Value');
+    options.ecog.extractsurface.method=get(handles.surfacemethod,'Value');
+    %options.ecog.localize=get(handles.localizeecog,'Value');
+catch
+    options.ecog.extractsurface.do=0;
+end
+
+function sides=ea_assignsides(handles)
+cnt=1;
+elnum = sum(cellfun(@(f) ~isempty(f), regexp(fieldnames(handles),'^side\d+$','match')));
+for el=1:elnum
+    if get(handles.(['side',num2str(el)]),'Value')
+        sides(cnt)=el;
+        cnt=cnt+1;
+    end
 end

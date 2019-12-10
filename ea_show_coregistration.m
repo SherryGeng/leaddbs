@@ -6,9 +6,9 @@ disp('Preparing images to show Coregistration...');
 
     movingfile=[options.moving];
 
-    moving=ea_open_vol(movingfile);
-    fixed=ea_open_vol([options.fixed]);
-   
+    moving = ea_open_vol(movingfile);
+    fixed = ea_open_vol([options.fixed]);
+
     if ~ea_hdr_iscoreg(fixed,moving)
         [pctfile,fctfile,ectfile]=fileparts(movingfile);
         matlabbatch{1}.spm.util.imcalc.input = {[options.root,options.prefs.patientdir,filesep,options.prefs.prenii_unnormalized];
@@ -25,7 +25,7 @@ disp('Preparing images to show Coregistration...');
         clear matlabbatch jobs;
     end
     moving=ea_load_nii(movingfile);
-    fixed=ea_load_nii([options.root,options.prefs.patientdir,filesep,options.prefs.prenii_unnormalized]);
+    fixed=ea_load_nii([options.fixed]);
 
     moving.img(:)=ea_nanzscore(moving.img(:)); %     ct.img(:)=ea_nanzscore(ct.img(:),'robust');
     moving.img=(moving.img+2.5)/5; % set max/min to -/+ 2.5 standard deviations

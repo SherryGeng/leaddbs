@@ -23,18 +23,18 @@ if isdeployed
 end
 
 if ~exist([home, '.ea_prefs.m'], 'file')
-    copyfile([ea_getearoot, 'common', filesep, 'ea_prefs_default.m'], [home, '.ea_prefs.m']);
+    copyfile([ea_getearoot, 'common', filesep, 'ea_prefs_default.m'], [home, '.ea_prefs.m'], 'f');
 end
 
 if ~exist([home, '.ea_prefs.mat'], 'file')
-    copyfile([ea_getearoot, 'common', filesep, 'ea_prefs_default.mat'], [home, '.ea_prefs.mat']);
+    copyfile([ea_getearoot, 'common', filesep, 'ea_prefs_default.mat'], [home, '.ea_prefs.mat'], 'f');
 end
 
 % load user prefs
 try
     % file name starting with '.' is not a valid function/script name, so
     % copy it to a temp file and then run it.
-    tempPrefs = ['ea_prefs_', strrep(ea_generate_guid, '-', '_')];
+    tempPrefs = ['ea_prefs_', strrep(ea_generate_uuid, '-', '_')];
     copyfile([home, '.ea_prefs.m'], [ea_getearoot, tempPrefs, '.m'])
     uprefs = feval(tempPrefs, patientname);
     delete([ea_getearoot, tempPrefs, '.m']);
@@ -53,6 +53,15 @@ prefs = combinestructs(dprefs, uprefs);
 if strcmp(context, 'normal')
     prefs.machine = combinestructs(dmachine.machine, umachine.machine);
 end
+
+
+
+% legacy code support for gl/l normalized file differentiation:
+prefs.prenii=prefs.gprenii;
+prefs.tranii=prefs.gtranii;
+prefs.cornii=prefs.gcornii;
+prefs.sagnii=prefs.gsagnii;
+prefs.ctnii=prefs.gctnii;
 
 
 function prefs = combinestructs(prefs, uprefs)

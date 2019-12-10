@@ -71,11 +71,12 @@ for peer=1:length(peerfolders)
         if ~exist([subdirec,'MAGeT',filesep,'warps',filesep],'file')
             mkdir([subdirec,'MAGeT',filesep,'warps',filesep]);
         end
-
-        try
-            ea_ants_nonlinear(sptos,spfroms,[subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'.nii'],weights,options);
-        catch
-            ea_error(['Something went wrong - could not generate a nonlinear warp from ',subdirec,' to ',peerdirec,'.']);
+        if ~exist([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'Composite.h5'],'file')
+            try
+                ea_ants_nonlinear(sptos,spfroms,[subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'.nii'],weights,options);
+            catch
+                ea_error(['Something went wrong - could not generate a nonlinear warp from ',subdirec,' to ',peerdirec,'.']);
+            end
         end
         delete([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'.nii']); % we only need the warp
 
@@ -85,21 +86,28 @@ for peer=1:length(peerfolders)
 
         % Now export composite transform from MNI -> Peer -> Subject
 
-        if ispc
-            sufx='.exe';
-        else
-            sufx=computer('arch');
+        % check if peertransforms are available, if not, build them:
+        if ~exist([peerfolders{peer},filesep,'glanatComposite',ea_getantstransformext([peerfolders{peer},filesep],options)],'file') || ...
+                ~exist([peerfolders{peer},filesep,'glanatInverseComposite',ea_getantstransformext([peerfolders{peer},filesep],options)],'file')
+            ea_normalize_ants(poptions,0);
         end
 
-        antsApply=[ea_getearoot,'ext_libs',filesep,'ANTs',filesep,'antsApplyTransforms.',sufx];
+        antsdir=[ea_getearoot,'ext_libs',filesep,'ANTs',filesep];
+        if ispc
+            applyTransforms = ea_path_helper([antsdir, 'antsApplyTransforms.exe']);
+        else
+            applyTransforms = [antsdir, 'antsApplyTransforms.', computer('arch')];
+        end
 
         template=ea_niigz([ea_space(options),'t2.nii']);
         prenii=ea_niigz([options.root,options.patientname,filesep,options.prefs.prenii_unnormalized]);
-        cmd=[antsApply,' -r ',template,...
+        cmd=[applyTransforms,' -r ',template,...
+            ' -v ',...
             ' -t ',ea_path_helper([peerfolders{peer},filesep,'glanatComposite',ea_getantstransformext([peerfolders{peer},filesep],options)]),...
             ' -t ',ea_path_helper([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'Composite.h5']),...
             ' -o [',ea_path_helper([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'2mni.nii']),',1]']; % temporary write out uncompressed (.nii) since will need to average slice by slice lateron.
-        icmd=[antsApply,' -r ',prenii,...
+        icmd=[applyTransforms,' -r ',prenii,...
+            ' -v ',...
             ' -t ',ea_path_helper([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'InverseComposite.h5']),...
             ' -t ',ea_path_helper([peerfolders{peer},filesep,'glanatInverseComposite',ea_getantstransformext([peerfolders{peer},filesep],options)]),...
             ' -o [',ea_path_helper([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'2sub.nii']),',1]']; % temporary write out uncompressed (.nii) since will need to average slice by slice lateron.
@@ -111,6 +119,10 @@ for peer=1:length(peerfolders)
             system(icmd);
         end
 
+        if ~exist([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'2mni.nii'],'file') || ...
+                ~exist([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'2sub.nii'],'file')
+            ea_error(['Something went wrong - could not generate a nonlinear warp from ',subdirec,' to ',peerdirec,'.']);
+        end
         % delete intermediary transforms
         delete([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'Composite.h5']);
         delete([subdirec,'MAGeT',filesep,'warps',filesep,poptions.patientname,'InverseComposite.h5']);
@@ -126,7 +138,7 @@ warpbase=[options.root,options.patientname,filesep,'MAGeT',filesep,'warps',files
 delete([warpbase,'ave2mni.nii']);
 fis=dir([warpbase,'*2mni.nii']);
 for fi=1:length(fis)
-ficell{fi}=ea_niigz([warpbase,fis(fi).name]);
+    ficell{fi}=ea_niigz([warpbase,fis(fi).name]);
 end
 ea_robustaverage_nii(ficell,[warpbase,'ave2mni.nii']);
 % need to do the following due to file format issues:
@@ -167,7 +179,7 @@ gzip([warpbase,'ave2mni.nii']);
 clear ficell
 fis=dir([warpbase,'*sub.nii']);
 for fi=1:length(fis)
-ficell{fi}=[warpbase,fis(fi).name];
+    ficell{fi}=[warpbase,fis(fi).name];
 end
 ficell(todelete)=[];
 ea_robustaverage_nii(ficell,[warpbase,'ave2sub.nii']);

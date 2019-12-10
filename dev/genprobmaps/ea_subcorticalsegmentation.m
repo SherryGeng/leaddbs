@@ -121,9 +121,9 @@ end
 whichnormmethod=ea_whichnormmethod(directory);
 switch whichnormmethod
     case ea_getantsnormfuns
-        ea_ants_applytransforms(options,{[ea_space,'bb.nii']},{[directory,'wbb.nii']},1);
+        ea_ants_apply_transforms(options,{[ea_space,'bb.nii']},{[directory,'wbb.nii']},1);
     case ea_getfslnormfuns
-        ea_fsl_applytransforms(options,{[ea_space,'bb.nii']},{[directory,'wbb.nii']},1);
+        ea_fsl_apply_normalization(options,{[ea_space,'bb.nii']},{[directory,'wbb.nii']},1);
     otherwise
         matlabbatch{1}.spm.util.defs.comp{1}.def = {[directory,'y_ea_normparams.nii']};
         matlabbatch{1}.spm.util.defs.out{1}.push.fnames = {[ea_space,'bb.nii']};
@@ -176,7 +176,7 @@ for m=1:length(mults)
     copyfile([directory,mults{m}],[directory,'raw_',mults{m}]);
     switch options.coregmr.method
         case 'SPM' % SPM
-            ea_docoreg_spm(options,[directory,mults{m},',1'],[directory,options.prefs.prenii_unnormalized,',1'],'nmi',1)
+            ea_spm_coreg(options,[directory,mults{m}],[directory,options.prefs.prenii_unnormalized],'nmi',1)
             try
                 movefile([directory,'r',mults{m}], [directory,mults{m}])
             end
@@ -189,12 +189,12 @@ for m=1:length(mults)
                 [directory,mults{m}],...
                 [directory,mults{m}],0);
         case 'Hybrid SPM & ANTs' % Hybrid SPM -> ANTs
-            ea_docoreg_spm(options,[directory,mults{m},',1'],[directory,options.prefs.prenii_unnormalized,',1'],'nmi',0)
+            ea_spm_coreg(options,[directory,mults{m}],[directory,options.prefs.prenii_unnormalized],'nmi',0)
             ea_ants([directory,options.prefs.prenii_unnormalized],...
                 [directory,mults{m}],...
                 [directory,mults{m}],0);
         case 'Hybrid SPM & ' % Hybrid SPM -> Brainsfit
-            ea_docoreg_spm([directory,mults{m},',1'],[directory,options.prefs.prenii_unnormalized,',1'],'nmi',0)
+            ea_spm_coreg([directory,mults{m}],[directory,options.prefs.prenii_unnormalized],'nmi',0)
             ea_brainsfit([directory,options.prefs.prenii_unnormalized],...
                 [directory,mults{m}],...
                 [directory,mults{m}],0);

@@ -20,7 +20,7 @@ if hotfix
         if ~exist([earoot,'tmp'] ,'dir')
             mkdir([earoot,'tmp']);
         end
-        disp('Downloading hotfix...');
+        disp('Downloading updated code...');
         try
             webopts=weboptions('Timeout',5);
             websave([earoot,'tmp',filesep,'hotfix.zip'],updurl,'id','hotfix',webopts);
@@ -74,13 +74,14 @@ if hotfix
         success=1;
         disp('*** Update finished.');
     catch
-        info=sprintf(['Hotfix does not exist or failed to apply hotfix!\n',...
+        info=sprintf(['Patch does not exist or failed to install development version of Lead!\n',...
                       'Please wait for the next release.']);
         disp(info);
         msgbox(info,'Update','Error');
     end
 else
-    info=sprintf('Local version is not applicable for hotfix!');
+    info=sprintf(['Local version is not applicable to install development version of Lead.\n'...
+        'Please upgrade to the latest release (v', web,') first!']);
     disp(info);
     msgbox(info,'Update','Help');
 end

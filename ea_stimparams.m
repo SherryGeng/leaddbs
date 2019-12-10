@@ -87,6 +87,7 @@ if strcmp(options.leadprod, 'group')
     Yshift = 24;
     set(handles.stimfig, 'Position', handles.stimfig.Position - [0 0 0 Yshift]);
     set(handles.headertxt, 'Position', handles.headertxt.Position - [0 Yshift 0 0]);
+    set(handles.settings, 'Position', handles.settings.Position - [0 Yshift+2 0 0]);
 else
     groupmode=0;
 
@@ -866,7 +867,7 @@ if groupmode
         'Yes, sure','No','No');
 
     switch choice
-        case 'No' 
+        case 'No'
             gSv=getappdata(handles.stimfig,'gSv');
             ochoice=ismember(get(hObject,'String'),gSv.vatmodel);
             setappdata(hObject,'Value',ochoice);
@@ -929,6 +930,8 @@ options.prefs=ea_prefs;
 setappdata(resultfig,'options',options);
 setappdata(handles.stimfig,'options',options);
 S=getappdata(handles.stimfig,'S');
+S=ea_activecontacts(S);
+setappdata(handles.stimfig,'S',S);
 if isfield(elstruct,'group')
     gcnt=ones(length(elstruct(1).groups),1);
 end
@@ -944,7 +947,7 @@ for el=1:length(elstruct)
         if isfield(elstruct,'group') % group analysis, more than one electrode set
             keyboard
         else % single patient
-            [stimparams(1,side).VAT(el).VAT,volume]=feval(ea_genvat,elstruct(el).coords_mm,S,side,options,stimname,options.prefs.machine.vatsettings.horn_ethresh,handles.stimfig);
+            [stimparams(1,side).VAT(el).VAT,volume]=feval(ea_genvat,elstruct(el).coords_mm,getappdata(handles.stimfig,'S'),side,options,stimname,options.prefs.machine.vatsettings.horn_ethresh,handles.stimfig);
             stimparams(1,side).volume=volume;
             flix=1;
         end
@@ -959,8 +962,13 @@ clear PL
 
 for group=flix
     setappdata(resultfig,'stimparams',stimparams(group,:));
-    setappdata(resultfig,'S',S(group))
-    ea_showfibres_volume(resultfig,options);
+    setappdata(resultfig,'curS',S(group));
+
+    if ~exist('hmchanged','var')
+        hmchanged=1;
+    end
+    ea_showfibers_volume(resultfig,options,hmchanged);
+
     %copyfile([options.root,options.patientname,filesep,'ea_stats.mat'],[options.root,options.patientname,filesep,'ea_stats_group_',num2str(group),'.mat']);
     try
         copyfile([options.root,options.patientname,filesep,'ea_pm.nii'],[options.root,options.patientname,filesep,'ea_pm_group_',num2str(group),'.nii']);
@@ -1560,7 +1568,8 @@ function stimlabel_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of stimlabel as text
 %        str2double(get(hObject,'String')) returns contents of stimlabel as a double
-S=getappdata(handles.stimfig,'S'); options=getappdata(handles.stimfig,'options');
+S=getappdata(handles.stimfig,'S');
+options=getappdata(handles.stimfig,'options');
 sel=get(handles.stimlabel,'String');
 sel=sel{get(handles.stimlabel,'Value')};
 if length(sel)>4 && strcmp(sel(1:4),' => ') % command, not entry
@@ -1620,6 +1629,76 @@ else
     setappdata(handles.stimfig,'stimlabel',S.label);
     setappdata(handles.stimfig,'S',S);
     ea_refreshguisp(handles,options);
+
+    %% stuff by Till for visualizing VATs by selecting them from the stimlabel list
+    % tries to load .mat-files which are now created by ea_genvat_horn.m
+    % and contain the VAT as well as the quiver. In case no .mat-files are
+    % available the vat_xxx.nii is loaded and visualized
+
+    visualizeVAT = 1;
+    if exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.mat']) == 2 && exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.mat']) == 2
+        load([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.mat']);
+        stimparams(1,1).VAT.VAT = vatfv;
+        stimparams(1,1).volume = vatvolume;
+        vatgradtemp(1) = vatgrad;
+        load([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.mat']);
+        stimparams(1,2).VAT.VAT = vatfv;
+        stimparams(1,2).volume = vatvolume;
+        vatgradtemp(2) = vatgrad;
+        vatgrad = vatgradtemp;
+    elseif  exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.mat']) == 2
+        load([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.mat']);
+        stimparams(1,1).VAT.VAT = vatfv;
+        stimparams(1,1).volume = vatvolume;
+    elseif  exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.mat']) == 2
+        load([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.mat']);
+        stimparams(1,1).VAT.VAT = vatfv;
+        stimparams(1,1).volume = vatvolume;
+    else
+        if exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.nii']) == 2 && exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.nii']) == 2
+            nii = ea_load_nii([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.nii']);
+            vatfv = ea_niiVAT2fvVAT(nii);
+%             vatfv = ea_smoothpatch(vatfv,1,35);
+            stimparams(1,1).VAT.VAT = vatfv;
+            nii = ea_load_nii([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.nii']);
+            vatfv = ea_niiVAT2fvVAT(nii);
+%             vatfv = ea_smoothpatch(vatfv,1,35);
+            stimparams(1,2).VAT.VAT = vatfv;
+        elseif exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.nii']) == 2
+            nii = ea_load_nii([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_right.nii']);
+            vatfv = ea_niiVAT2fvVAT(nii);
+%             vatfv = ea_smoothpatch(vatfv,1,35);
+            stimparams(1,1).VAT.VAT = vatfv;
+        elseif exist([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.nii']) == 2
+            nii = ea_load_nii([options.root,options.patientname,filesep,'stimulations',filesep,label,filesep,'vat_left.nii']);
+            vatfv = ea_niiVAT2fvVAT(nii);
+%             vatfv = ea_smoothpatch(vatfv,1,35);
+            stimparams(1,1).VAT.VAT = vatfv;
+        else
+            visualizeVAT = 0;
+        end
+
+    end
+
+    if visualizeVAT
+        setappdata(handles.stimfig,'stimparams',stimparams);
+        resultfig = getappdata(handles.stimfig,'resultfig');
+        PL=getappdata(resultfig,'PL');
+        for group=1:length(PL)
+            deletePL(PL(group));
+        end
+        clear PL
+        if exist('vatgrad')
+            setappdata(resultfig,'vatgrad',vatgrad);
+        end
+        setappdata(resultfig,'stimparams',stimparams(1,:));
+        setappdata(resultfig,'curS',S(1))
+        options.writeoutstats = 1;
+        ea_showfibers_volume(resultfig,options);
+    else
+        disp('VAT, cannot be visualized please recalculate')
+    end
+
 end
 
 
@@ -1668,6 +1747,7 @@ if groupmode
     elstruct=getappdata(handles.stimfig,'elstruct');
 
     set(handles.headertxt,'String',['Patient (',num2str(actpt),'/', num2str(length(elstruct)),'): ',elstruct(actpt).name]);
+
     gSv=getappdata(handles.stimfig,'gSv');
     if isfield(gSv,'vatmodel')
         if isempty(gSv.vatmodel)
@@ -1732,20 +1812,23 @@ end
 stimlabel=getappdata(handles.stimfig,'stimlabel');
 
 if isempty(S)
-    S=initializeS(stimlabel,options,handles);
+    wasempty=1;
+    S=ea_initializeS(stimlabel,options,handles);
     setappdata(handles.stimfig,'stimlabel',S.label);
 else
-   if isempty(S.Rs1)
-       S=initializeS(stimlabel,options,handles);
-       setappdata(handles.stimfig,'stimlabel',S.label);
-   end
+    wasempty=0;
+    if isempty(S.Rs1)
+        S=ea_initializeS(stimlabel,options,handles);
+        setappdata(handles.stimfig,'stimlabel',S.label);
+    end
 end
-
-if isfield(S, 'model')
-    [~,ix]=ismember(S.model,get(handles.modelselect,'String'));
-    set(handles.modelselect,'Value',ix);
-else
-    set(handles.modelselect,'Value',1);
+if ~wasempty
+    if isfield(S, 'model')
+        [~,ix]=ismember(S.model,get(handles.modelselect,'String'));
+        set(handles.modelselect,'Value',ix);
+    else
+        set(handles.modelselect,'Value',1);
+    end
 end
 
 Ractive=S.active(1);
@@ -1800,7 +1883,7 @@ if nargin==3
 
         end
     else
-       S=ea_redistribute_voltage(S,varargin{3});
+        S=ea_redistribute_voltage(S,varargin{3});
     end
 end
 
@@ -1814,7 +1897,7 @@ for source=1:4
     set(eval(['handles.Rs',num2str(source),'va']),'Value',eval(['S.Rs',num2str(source),'.va']));
 
 
-%if eval(['S.Rs',num2str(source),'.amp']) % check if a valid +/- combination is active, if not set defaults.
+    %if eval(['S.Rs',num2str(source),'.amp']) % check if a valid +/- combination is active, if not set defaults.
     anycontactpositive=0; anycontactnegative=0;
     for k=0:7
         if eval(['S.Rs',num2str(source),'.k',num2str(k),'.pol==1'])
@@ -1833,7 +1916,7 @@ for source=1:4
         eval(['S.Rs',num2str(source),'.case.pol=2;']);
         eval(['S.Rs',num2str(source),'.case.perc=100;']);
     end
-%end
+    %end
 
 end
 
@@ -1843,25 +1926,25 @@ for source=1:4
     set(eval(['handles.Ls',num2str(source),'am']),'String',num2str(S.amplitude{2}(source)));
     set(eval(['handles.Ls',num2str(source),'va']),'Value',eval(['S.Ls',num2str(source),'.va']));
 
- %   if eval(['S.Ls',num2str(source),'.amp']) % check if a valid +/- combination is active, if not set defaults.
-        anycontactpositive=0; anycontactnegative=0;
-        for k=8:15
-            if eval(['S.Ls',num2str(source),'.k',num2str(k),'.pol==1'])
-                anycontactnegative=1;
-            elseif eval(['S.Ls',num2str(source),'.k',num2str(k),'.pol==2'])
-                anycontactpositive=1;
-            end
+    %   if eval(['S.Ls',num2str(source),'.amp']) % check if a valid +/- combination is active, if not set defaults.
+    anycontactpositive=0; anycontactnegative=0;
+    for k=8:15
+        if eval(['S.Ls',num2str(source),'.k',num2str(k),'.pol==1'])
+            anycontactnegative=1;
+        elseif eval(['S.Ls',num2str(source),'.k',num2str(k),'.pol==2'])
+            anycontactpositive=1;
         end
+    end
 
-        if ~anycontactnegative
-            eval(['S.Ls',num2str(source),'.k9.pol=1;']);
-            eval(['S.Ls',num2str(source),'.k9.perc=100;']);
-        end
-        if ~anycontactpositive
-            eval(['S.Ls',num2str(source),'.case.pol=2;']);
-            eval(['S.Ls',num2str(source),'.case.perc=100;']);
-        end
- %   end
+    if ~anycontactnegative
+        eval(['S.Ls',num2str(source),'.k9.pol=1;']);
+        eval(['S.Ls',num2str(source),'.k9.perc=100;']);
+    end
+    if ~anycontactpositive
+        eval(['S.Ls',num2str(source),'.case.pol=2;']);
+        eval(['S.Ls',num2str(source),'.case.perc=100;']);
+    end
+    %   end
 end
 
 %% model to handles: all GUI elements.
@@ -2012,6 +2095,12 @@ switch model
         ea_disable_vas(handles,options);
         set(handles.betawarning,'visible','off');
         set(handles.settings,'visible','off');
+    case 'Dembek 2017'
+        ea_show_impedance(handles);
+        S.monopolarmodel=1;
+        ea_enable_vas(handles,options);
+        set(handles.betawarning,'visible','off');
+        set(handles.settings,'visible','on');
 end
 
 S.model=model;
@@ -2020,7 +2109,7 @@ S.model=model;
 if get(handles.(['Rs',num2str(Ractive),'va']),'Value')==1 % Volt
     ea_show_percent(handles,options,1,'off'); % right hemisphere
 else % Ampere
-        ea_show_percent(handles,options,1,'on'); % right hemisphere
+    ea_show_percent(handles,options,1,'on'); % right hemisphere
 end
 if get(handles.(['Ls',num2str(Ractive),'va']),'Value')==1 % Volt
     ea_show_percent(handles,options,2,'off'); % left hemisphere
@@ -2102,18 +2191,18 @@ for k=0:15
 end
 
 for ohm=1:4
-	eval(['set(handles.kohmtext',num2str(ohm),',''visible'',''off'');']);
+    eval(['set(handles.kohmtext',num2str(ohm),',''visible'',''off'');']);
 end
 
 
 function ea_show_impedance(handles)
 
 for k=0:15
-	eval(['set(handles.k',num2str(k),'im,''visible'',''on'');']);
+    eval(['set(handles.k',num2str(k),'im,''visible'',''on'');']);
 end
 
 for ohm=1:4
-	eval(['set(handles.kohmtext',num2str(ohm),',''visible'',''on'');']);
+    eval(['set(handles.kohmtext',num2str(ohm),',''visible'',''on'');']);
 end
 
 
@@ -2165,20 +2254,20 @@ if ischar(changedobj) % different polarity on the block
         return
 
     else
-%         if S.([sidec,'s',num2str(S.active(side))]).va==2 % ampere only allows one anode and one cathode
-%             for c=1:length(contsCase)
-%
-%                 if S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).pol==polchanged % same polarity as changed object
-%                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).pol=ea_swappol(polchanged);
-%                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).perc=100;
-%                 else
-%                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).pol=0;
-%                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).perc=0;
-%                 end
-%             end
-%             S.([sidec,'s',num2str(S.active(side))]).(changedobj).pol=1;
-%             S.([sidec,'s',num2str(S.active(side))]).(changedobj).perc=100;
-%         end
+        %         if S.([sidec,'s',num2str(S.active(side))]).va==2 % ampere only allows one anode and one cathode
+        %             for c=1:length(contsCase)
+        %
+        %                 if S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).pol==polchanged % same polarity as changed object
+        %                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).pol=ea_swappol(polchanged);
+        %                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).perc=100;
+        %                 else
+        %                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).pol=0;
+        %                     S.([sidec,'s',num2str(S.active(side))]).(contsCase{c}).perc=0;
+        %                 end
+        %             end
+        %             S.([sidec,'s',num2str(S.active(side))]).(changedobj).pol=1;
+        %             S.([sidec,'s',num2str(S.active(side))]).(changedobj).perc=100;
+        %         end
     end
 
     if polchanged==0
@@ -2259,7 +2348,7 @@ else % voltage percentage changed
     changedobj=get(changedobj,'Tag');
     changedobj=changedobj(1:end-1);
 
-     switch changedobj
+    switch changedobj
         case Rconts
             conts=Rconts;
             sidec='R';
@@ -2278,19 +2367,19 @@ else % voltage percentage changed
             changedobj='case';
             side=2;
             sidec='L';
-     end
+    end
 
-     % check for monopolar models:
-     if S.monopolarmodel % these allow only 1 active anode contact per model.
-         for c=1:length(conts)
-             eval(['S.',sidec,'s',num2str(S.active(side)),'.',conts{c},'.pol=0;']);
-             eval(['S.',sidec,'s',num2str(S.active(side)),'.',conts{c},'.perc=0;']);
-         end
-         eval(['S.',sidec,'s',num2str(S.active(side)),'.',changedobj,'.pol=1;']);
-         eval(['S.',sidec,'s',num2str(S.active(side)),'.',changedobj,'.perc=100;']);
+    % check for monopolar models:
+    if S.monopolarmodel % these allow only 1 active anode contact per model.
+        for c=1:length(conts)
+            eval(['S.',sidec,'s',num2str(S.active(side)),'.',conts{c},'.pol=0;']);
+            eval(['S.',sidec,'s',num2str(S.active(side)),'.',conts{c},'.perc=0;']);
+        end
+        eval(['S.',sidec,'s',num2str(S.active(side)),'.',changedobj,'.pol=1;']);
+        eval(['S.',sidec,'s',num2str(S.active(side)),'.',changedobj,'.perc=100;']);
 
-         return
-     end
+        return
+    end
 
     % check polarity of changed object:
     try
@@ -2429,72 +2518,7 @@ end
 ea_refreshguisp(handles,options,ID);
 
 
-function S = initializeS(varargin)
 
-if nargin>1
-    options=varargin{2};
-    handles=varargin{3};
-end
-
-if nargin
-    if isempty(varargin{1})
-        [labels, preexist] = ea_detstimname(options);
-        set(handles.stimlabel, 'String', labels);
-    elseif (isfield(options, 'gen_newstim') && options.gen_newstim==1)
-        labels = ea_detstimname(options);
-        preexist = 0;
-        options.gen_newstim = 0;
-        set(handles.stimlabel, 'String', labels);
-    else
-        labels = varargin{1};
-        preexist = 0;
-    end
-else
-    [labels, preexist] = ea_detstimname(options);
-end
-
-if ~iscell(labels)
-    labels={labels};
-end
-
-try
-    S.label = labels{get(handles.stimlabel,'Value')};
-catch
-    keyboard
-end
-
-if preexist
-   load([options.root,options.patientname,filesep,'stimulations',filesep,S.label,filesep,'stimparameters.mat']);
-   return
-end
-
-% right sources
-for source=1:4
-    for k=0:7
-        eval(['S.Rs',num2str(source),'.k',num2str(k),'.perc=0;']);
-        eval(['S.Rs',num2str(source),'.k',num2str(k),'.pol=0;']);
-        eval(['S.Rs',num2str(source),'.k',num2str(k),'.imp=1;']);
-    end
-    eval(['S.Rs',num2str(source),'.amp=0;']);
-    eval(['S.Rs',num2str(source),'.va=1;']);
-    eval(['S.Rs',num2str(source),'.case.perc=100;']);
-    eval(['S.Rs',num2str(source),'.case.pol=2;']);
-end
-
-% left sources
-for source=1:4
-    for k=8:15
-        eval(['S.Ls',num2str(source),'.k',num2str(k),'.perc=0;']);
-        eval(['S.Ls',num2str(source),'.k',num2str(k),'.pol=0;']);
-        eval(['S.Ls',num2str(source),'.k',num2str(k),'.imp=1;']);
-    end
-    eval(['S.Ls',num2str(source),'.amp=0;']);
-    eval(['S.Ls',num2str(source),'.va=1;']);
-    eval(['S.Ls',num2str(source),'.case.perc=100;']);
-    eval(['S.Ls',num2str(source),'.case.pol=2;']);
-end
-
-S.active=[1,1];
 
 
 function Ls3am_Callback(hObject, eventdata, handles)
@@ -2733,6 +2757,9 @@ function nextpt_Callback(hObject, eventdata, handles)
 
 S=getappdata(handles.stimfig,'S');
 gS=getappdata(handles.stimfig,'gS');
+
+gSv=getappdata(handles.stimfig,'gSv');
+
 actpt=getappdata(handles.stimfig,'actpt');
 elstruct=getappdata(handles.stimfig,'elstruct');
 options=getappdata(handles.stimfig,'options');
@@ -2742,11 +2769,17 @@ if isempty(gS)
 end
 
 S=ea_activecontacts(S);
-gS(actpt)=S;
+try
+    gS(actpt)=S;
+catch
+    S.sources=1:4;
+    S.volume=[0,0];
+    gS(actpt)=S;
+end
 setappdata(handles.stimfig,'gS',gS);
 
 if (actpt+1)>length(elstruct)
-   setto=1;
+    setto=1;
 else
     setto=actpt+1;
 end
@@ -2780,7 +2813,7 @@ gS(actpt)=S;
 setappdata(handles.stimfig,'gS',gS);
 
 if (actpt-1)<1
-   setto=length(elstruct);
+    setto=length(elstruct);
 else
     setto=actpt-1;
 end
@@ -2811,7 +2844,14 @@ if isempty(gS)
 end
 
 S = ea_activecontacts(S);
-gS(actpt) = S;
+
+try
+    gS(actpt)=S;
+catch
+    S.sources=1:4;
+    S.volume=[0,0];
+    gS(actpt)=S;
+end
 setappdata(handles.stimfig, 'gS', gS);
 
 gSv = getappdata(handles.stimfig, 'gSv');
@@ -3073,4 +3113,17 @@ function settings_Callback(hObject, eventdata, handles)
 % hObject    handle to settings (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-ea_vatsettings_horn;
+models=get(handles.modelselect,'String');
+try
+    model=models{get(handles.modelselect,'Value')};
+catch
+    set(handles.modelselect,'Value',1);
+    model=models{1};
+end
+switch model
+    case 'SimBio/FieldTrip (see Horn 2017)'
+        ea_vatsettings_horn;
+    case 'Dembek 2017'
+        ea_vatsettings_dembek;
+end
+% ea_vatsettings_horn;
